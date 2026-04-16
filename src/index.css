@@ -487,6 +487,33 @@
   .tab-btn   { gap: 0; }
 }
 
+/* ── Credit Cards ─────────────────────────────────────────────── */
+.cc-total-debt {
+  background: var(--blue-light);
+  border: 1px solid var(--blue);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  color: var(--blue-dark);
+  margin-bottom: 16px;
+}
+
+.cc-payoff-note {
+  font-size: 0.82rem;
+  color: var(--blue);
+  font-style: italic;
+}
+
+.cc-paid-off {
+  font-size: 0.8rem;
+  color: var(--green);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.row-cc-payment td { color: var(--blue-dark); font-style: italic; }
+.row-cc-payment td:last-child { color: var(--blue-dark); }
+
 /* ── Sign-in screen ───────────────────────────────────────────── */
 .signin-screen {
   display: flex;
