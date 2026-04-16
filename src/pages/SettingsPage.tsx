@@ -28,6 +28,7 @@ interface SophtronFinishData {
 
 interface SophtronWidgetConfig {
   env: string;
+  partner?: string;
   integration_key: string;
   request_id: string;
   onFinish?: (data: SophtronFinishData) => boolean;
@@ -150,6 +151,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
         'Add',
         {
           env: 'prod',
+          partner: 'default',
           integration_key: integrationKey,
           request_id: requestId,
           onFinish: (data) => {
@@ -157,6 +159,11 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
               window.sophtron?.destroy();
               // Fire-and-forget; handleSophtronSuccess manages its own error state.
               handleSophtronSuccess(data);
+              return true;
+            }
+            if (data.step === 'Failure') {
+              window.sophtron?.destroy();
+              setBankError('Bank linking failed. Please try again.');
               return true;
             }
             return false;
