@@ -469,6 +469,10 @@
 }
 .btn-payment-processed:hover { background: var(--green-light); border-color: var(--green); }
 
+/* Submitted bill row: muted to indicate in-progress */
+.row-bill-submitted td { color: var(--gray-400); text-decoration: line-through; }
+.row-bill-submitted .btn-payment-submitted { text-decoration: none; }
+
 /* Processed bill row: muted to indicate done */
 .row-bill-processed td { color: var(--gray-400); text-decoration: line-through; }
 .row-bill-processed .btn-payment-processed { text-decoration: none; }
