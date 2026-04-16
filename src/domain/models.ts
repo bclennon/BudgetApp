@@ -20,6 +20,7 @@ export interface PaySettings {
   paycheckAmountCents: number;
   frequency: Frequency;
   nextPayday: string; // "YYYY-MM-DD"
+  minSpendPerDayCents: number; // minimum daily spending amount in cents to keep before applying surplus to credit cards
   bankLinked?: boolean; // true once a bank account has been linked via Sophtron
 }
 
@@ -86,6 +87,12 @@ export interface PayPeriod {
   remainingCents: number;
   daysInPeriod: number;
   spendingPerDayRaw: number;
+  /** Daily spend capped at minSpendPerDayCents (equals spendingPerDayRaw when there is no surplus). */
+  displayedSpendingPerDay: number;
+  /** Cents above the minimum daily spend threshold — available to put toward credit cards. */
+  surplusCents: number;
+  /** True when there are surplus funds above the minimum daily spend. */
+  hasSurplus: boolean;
 }
 
 export interface BackupData {

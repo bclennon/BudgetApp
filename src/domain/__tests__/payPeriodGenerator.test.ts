@@ -6,8 +6,9 @@ function makeSettings(
   nextPayday: string,
   frequency: PaySettings['frequency'],
   paycheckCents = 300000,
+  minSpendPerDayCents = 0
 ): PaySettings {
-  return { paycheckAmountCents: paycheckCents, frequency, nextPayday };
+  return { paycheckAmountCents: paycheckCents, frequency, nextPayday, minSpendPerDayCents };
 }
 
 describe('generatePayPeriods', () => {
@@ -108,5 +109,35 @@ describe('generatePayPeriods', () => {
     const periods = generatePayPeriods(settings, [], 1, overrides);
     expect(periods[0].billsTotalCents).toBe(0);
     expect(periods[0].remainingCents).toBe(200000);
+  });
+
+  it('surplus is zero when minSpendPerDayCents is 0', () => {
+    // Paycheck $3000, no bills, 31-day month → spendingPerDayRaw = floor(300000/31) = 9677
+    const settings = makeSettings('2024-01-01', 'MONTHLY', 300000, 0);
+    const periods = generatePayPeriods(settings, [], 1);
+    expect(periods[0].hasSurplus).toBe(false);
+    expect(periods[0].surplusCents).toBe(0);
+    expect(periods[0].displayedSpendingPerDay).toBe(periods[0].spendingPerDayRaw);
+  });
+
+  it('surplus is computed when minSpendPerDayCents is below spendingPerDayRaw', () => {
+    // Paycheck $3100, no bills, 31-day period (MONTHLY from Jan 1)
+    // spendingPerDayRaw = floor(310000 / 31) = 10000
+    // minSpendPerDay = 5000, surplus = (10000 - 5000) * 31 = 155000
+    const settings = makeSettings('2024-01-01', 'MONTHLY', 310000, 5000);
+    const periods = generatePayPeriods(settings, [], 1);
+    expect(periods[0].hasSurplus).toBe(true);
+    expect(periods[0].displayedSpendingPerDay).toBe(5000);
+    expect(periods[0].surplusCents).toBe((10000 - 5000) * periods[0].daysInPeriod);
+  });
+
+  it('no surplus when spendingPerDayRaw is at or below minSpendPerDayCents', () => {
+    // Paycheck $1000, no bills, 31-day month → spendingPerDayRaw = floor(100000/31) = 3225
+    // minSpendPerDay = 5000 → spendingPerDayRaw < min, so no surplus
+    const settings = makeSettings('2024-01-01', 'MONTHLY', 100000, 5000);
+    const periods = generatePayPeriods(settings, [], 1);
+    expect(periods[0].hasSurplus).toBe(false);
+    expect(periods[0].surplusCents).toBe(0);
+    expect(periods[0].displayedSpendingPerDay).toBe(periods[0].spendingPerDayRaw);
   });
 });

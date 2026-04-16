@@ -97,6 +97,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
+  const [minSpendPerDay, setMinSpendPerDay] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -110,6 +111,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
       setPaycheck(dollarsToStr(settings.paycheckAmountCents));
       setFrequency(settings.frequency);
       setNextPayday(settings.nextPayday);
+      setMinSpendPerDay(dollarsToStr(settings.minSpendPerDayCents ?? 0));
     }
   }, [settings]);
 
@@ -208,6 +210,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
     e.preventDefault();
     setError('');
     const paycheckCents = strToCents(paycheck);
+    const minSpendCents = strToCents(minSpendPerDay);
     if (isNaN(paycheckCents) || paycheckCents <= 0) {
       setError('Enter a valid paycheck amount.');
       return;
@@ -216,7 +219,11 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
       setError('Select a next payday date.');
       return;
     }
-    onSave({ paycheckAmountCents: paycheckCents, frequency, nextPayday });
+    if (isNaN(minSpendCents) || minSpendCents < 0) {
+      setError('Enter a valid minimum spending per day amount.');
+      return;
+    }
+    onSave({ paycheckAmountCents: paycheckCents, frequency, nextPayday, minSpendPerDayCents: minSpendCents });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -257,6 +264,21 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
               value={nextPayday}
               onChange={(e) => setNextPayday(e.target.value)}
             />
+          </div>
+
+          <div className="form-group">
+            <label>Min. Spending / Day ($)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={minSpendPerDay}
+              onChange={(e) => setMinSpendPerDay(e.target.value)}
+              placeholder="0.00"
+            />
+            <p className="field-hint">
+              Amount reserved for daily spending each day. Any surplus above this is applied toward credit card payments.
+            </p>
           </div>
 
           <div className="form-actions">
