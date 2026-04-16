@@ -126,6 +126,12 @@ export function generatePayPeriods(
     }, 0);
     const remainingCents = effectivePaycheckCents - billsTotalCents;
     const spendingPerDayRaw = daysInPeriod > 0 ? Math.trunc(remainingCents / daysInPeriod) : 0;
+    const minSpendPerDay = settings.minSpendPerDayCents ?? 0;
+    const hasSurplus = minSpendPerDay > 0 && spendingPerDayRaw > minSpendPerDay;
+    const surplusCents = hasSurplus
+      ? (spendingPerDayRaw - minSpendPerDay) * daysInPeriod
+      : 0;
+    const displayedSpendingPerDay = hasSurplus ? minSpendPerDay : spendingPerDayRaw;
 
     periods.push({
       startDate: currentStart,
@@ -136,6 +142,9 @@ export function generatePayPeriods(
       remainingCents,
       daysInPeriod,
       spendingPerDayRaw,
+      displayedSpendingPerDay,
+      surplusCents,
+      hasSurplus,
     });
 
     currentStart = nextPay;

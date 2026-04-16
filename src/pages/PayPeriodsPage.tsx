@@ -346,17 +346,17 @@ function PeriodCard({
   const isProcessed = override.creditCardPaymentStatus === 'processed';
 
   // When processed, use the amount that was stored at payment time; otherwise
-  // calculate against the current (adjusted) balance up to remaining funds.
+  // calculate against the surplus above the minimum daily spend.
   const ccPaymentCents = isProcessed
     ? (override.creditCardPaymentAmountCents ?? 0)
-    : (priorityCard ? Math.min(period.remainingCents, priorityCard.balanceCents) : 0);
+    : (priorityCard ? Math.min(period.hasSurplus ? period.surplusCents : period.remainingCents, priorityCard.balanceCents) : 0);
 
   // Once a CC payment is processed, stop deducting it from Remaining —
   // same behaviour as marking a regular bill as processed.
   const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : ccPaymentCents);
-  const effectiveSpendingPerDay = period.daysInPeriod > 0
-    ? Math.trunc(effectiveRemainingCents / period.daysInPeriod)
-    : 0;
+  const effectiveSpendingPerDay = period.hasSurplus
+    ? period.displayedSpendingPerDay
+    : (period.daysInPeriod > 0 ? Math.trunc(effectiveRemainingCents / period.daysInPeriod) : 0);
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
@@ -688,7 +688,8 @@ export default function PayPeriodsPage({
       const effectivePriorityCard = getPriorityCard(adjustedCards);
       const override = overrides[period.startDate];
       if (effectivePriorityCard && override?.creditCardPaymentStatus !== 'processed') {
-        const planned = Math.min(period.remainingCents, effectivePriorityCard.balanceCents);
+        const plannedAmount = period.hasSurplus ? period.surplusCents : period.remainingCents;
+        const planned = Math.min(plannedAmount, effectivePriorityCard.balanceCents);
         if (planned > 0) {
           runningCards = runningCards.map((c) =>
             c.id === effectivePriorityCard.id
