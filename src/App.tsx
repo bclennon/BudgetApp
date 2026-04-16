@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Bill, PaySettings } from './domain/models';
-import { loadBills, loadSettings, saveBills, saveSettings, getNextBillId } from './data/storage';
+import {
+  loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
+  loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
+} from './data/storage';
+import { AuthProvider, useAuth } from './auth/AuthContext';
+import SignInPage from './pages/SignInPage';
 import PayPeriodsPage from './pages/PayPeriodsPage';
 import BillsPage from './pages/BillsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -15,32 +20,66 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'backup', label: 'Backup', icon: '💾' },
 ];
 
-export default function App() {
+function AppShell() {
+  const { user, loading, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('periods');
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
+  const [cloudLoaded, setCloudLoaded] = useState(false);
+
+  // Load from Firestore when the user signs in.
+  useEffect(() => {
+    if (!user) {
+      setCloudLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    const uid = user.uid;
+    async function syncFromCloud() {
+      const [cloudBills, cloudSettings] = await Promise.all([
+        loadBillsFromCloud(uid),
+        loadSettingsFromCloud(uid),
+      ]);
+      if (cancelled) return;
+      if (cloudBills !== null) {
+        setBills(cloudBills);
+        saveBills(cloudBills);
+      }
+      if (cloudSettings !== null) {
+        setSettings(cloudSettings);
+        saveSettings(cloudSettings);
+      }
+      setCloudLoaded(true);
+    }
+    syncFromCloud();
+    return () => { cancelled = true; };
+  }, [user]);
 
   function addBill(name: string, dayOfMonth: number, amountCents: number) {
     const updated = [...bills, { id: getNextBillId(bills), name, dayOfMonth, amountCents }];
     setBills(updated);
     saveBills(updated);
+    if (user) saveBillsToCloud(user.uid, updated);
   }
 
   function updateBill(bill: Bill) {
     const updated = bills.map((b) => (b.id === bill.id ? bill : b));
     setBills(updated);
     saveBills(updated);
+    if (user) saveBillsToCloud(user.uid, updated);
   }
 
   function deleteBill(id: number) {
     const updated = bills.filter((b) => b.id !== id);
     setBills(updated);
     saveBills(updated);
+    if (user) saveBillsToCloud(user.uid, updated);
   }
 
   function updateSettings(s: PaySettings) {
     setSettings(s);
     saveSettings(s);
+    if (user) saveSettingsToCloud(user.uid, s);
   }
 
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
@@ -50,15 +89,30 @@ export default function App() {
     }
     setBills(updated);
     saveBills(updated);
+    if (user) saveBillsToCloud(user.uid, updated);
   }
 
   function importData(newBills: Bill[], newSettings: PaySettings | null) {
     setBills(newBills);
     saveBills(newBills);
+    if (user) saveBillsToCloud(user.uid, newBills);
     if (newSettings) {
       setSettings(newSettings);
       saveSettings(newSettings);
+      if (user) saveSettingsToCloud(user.uid, newSettings);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="app-loading">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <SignInPage />;
   }
 
   return (
@@ -74,7 +128,15 @@ export default function App() {
             <span className="tab-label">{t.label}</span>
           </button>
         ))}
+        <button className="tab-btn" onClick={signOut} title={`Signed in as ${user.displayName ?? user.email}`}>
+          <span className="tab-icon">👤</span>
+          <span className="tab-label">Sign Out</span>
+        </button>
       </nav>
+
+      {!cloudLoaded && (
+        <div className="cloud-loading-bar">Syncing data…</div>
+      )}
 
       <main className="content">
         {tab === 'periods' && <PayPeriodsPage bills={bills} settings={settings} />}
@@ -89,3 +151,12 @@ export default function App() {
     </div>
   );
 }
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  );
+}
+
