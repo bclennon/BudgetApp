@@ -17,13 +17,53 @@
   --gray-700:   #374151;
   --gray-900:   #111827;
   --white:      #FFFFFF;
-  --radius:     8px;
-  --shadow:     0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+  --radius:     10px;
+  --shadow:     0 1px 4px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
   line-height: 1.5;
   color: var(--gray-900);
   background: var(--gray-50);
+}
+
+/* ── Dark theme ───────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --blue:        #60A5FA;
+  --blue-dark:   #93C5FD;
+  --blue-light:  #1E3A5F;
+  --red:         #F87171;
+  --red-light:   #3B0000;
+  --green:       #4ADE80;
+  --green-light: #052E16;
+  --gray-50:     #0F172A;
+  --gray-100:    #1E293B;
+  --gray-200:    #334155;
+  --gray-400:    #475569;
+  --gray-500:    #94A3B8;
+  --gray-700:    #CBD5E1;
+  --gray-900:    #F1F5F9;
+  --white:       #1E293B;
+  --shadow:      0 1px 4px rgba(0,0,0,.40), 0 1px 2px rgba(0,0,0,.30);
+  color-scheme: dark;
+}
+
+/* Smooth theme transitions */
+body,
+.tab-bar,
+.card,
+.signin-card,
+.cloud-loading-bar,
+.cc-total-debt,
+.form-group input,
+.form-group select,
+.inline-input,
+.inline-select,
+.import-textarea,
+.btn-primary,
+.btn-secondary,
+.btn-icon,
+.btn-google {
+  transition: background-color 0.2s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 /* ── Layout ───────────────────────────────────────────────────── */
@@ -597,4 +637,44 @@
   font-size: 0.82rem;
   padding: 6px 12px;
   border-bottom: 1px solid var(--blue);
+}
+
+/* ── Theme Picker ─────────────────────────────────────────────── */
+.theme-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.theme-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 20px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-50);
+  color: var(--gray-700);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+  min-width: 76px;
+}
+
+.theme-btn:hover {
+  border-color: var(--blue);
+  color: var(--gray-900);
+}
+
+.theme-btn.active {
+  border-color: var(--blue);
+  background: var(--blue-light);
+  color: var(--blue);
+}
+
+.theme-btn-icon {
+  font-size: 1.3rem;
+  line-height: 1;
 }
