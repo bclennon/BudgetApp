@@ -79,6 +79,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.1")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.1")
 
+    // AppCompat (required for Theme.AppCompat.Light.NoActionBar)
+    implementation("androidx.appcompat:appcompat:1.7.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test:1.9.24")
 

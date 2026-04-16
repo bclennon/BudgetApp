@@ -15,6 +15,12 @@ class BudgetApplication : Application() {
             applicationContext,
             AppDatabase::class.java,
             "budget_database"
-        ).build()
+        )
+            // Recreates the database if the schema changes without a migration path.
+            // This prevents the IllegalStateException crash caused by a schema hash
+            // mismatch (e.g., after modifying entities during development).
+            // Note: this will clear all local data when a schema change is detected.
+            .fallbackToDestructiveMigration()
+            .build()
     }
 }
