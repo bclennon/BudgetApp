@@ -339,7 +339,8 @@ function PeriodCard({
   const isProcessed = override.creditCardPaymentStatus === 'processed';
 
   // Planned payments: distribute surplus across cards in priority order.
-  const availableCents = period.hasSurplus ? period.surplusCents : period.remainingCents;
+  // Only surplus funds (above the minimum daily spend) are available for CC payments.
+  const availableCents = period.hasSurplus ? period.surplusCents : 0;
   const plannedPayments = getPlannedCardPayments(availableCents, creditCards);
 
   // When processed, read what was actually stored (supports both new multi-card
@@ -716,7 +717,7 @@ export default function PayPeriodsPage({
       const adjustedCards = runningCards;
       const override = overrides[period.startDate];
       if (override?.creditCardPaymentStatus !== 'processed') {
-        const plannedAmount = period.hasSurplus ? period.surplusCents : period.remainingCents;
+        const plannedAmount = period.hasSurplus ? period.surplusCents : 0;
         const payments = getPlannedCardPayments(plannedAmount, adjustedCards);
         if (payments.length > 0) {
           const paymentMap = new Map(payments.map((p) => [p.card.id, p.amountCents]));
