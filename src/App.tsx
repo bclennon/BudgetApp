@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Bill, CreditCard, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
+import { generatePayPeriods } from './domain/payPeriodGenerator';
 import {
   loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
   loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
@@ -139,9 +140,17 @@ function AppShell() {
     updateCreditCard({ ...card, balanceCents: newBalance });
   }
 
-  function handleBankLinked() {
+  function handleBankLinked(balanceCents?: number) {
     if (!settings) return;
     updateSettings({ ...settings, bankLinked: true });
+    if (balanceCents !== undefined) {
+      const today = new Date().toISOString().slice(0, 10);
+      const periods = generatePayPeriods(settings, bills);
+      const currentPeriod = periods.find((p) => p.startDate <= today && today <= p.endDate);
+      if (currentPeriod) {
+        updatePeriodOverride(currentPeriod.startDate, { paycheckAmountCents: balanceCents });
+      }
+    }
   }
 
   function handleBankUnlinked() {

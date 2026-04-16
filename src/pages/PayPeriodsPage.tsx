@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Bill, CreditCard, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
@@ -246,8 +246,7 @@ interface PeriodCardProps {
   allPeriods: PayPeriod[];
   override: PayPeriodOverride;
   defaultPaycheckCents: number;
-  isCurrentPeriod: boolean;
-  plaidLinked: boolean;
+  bankLinked: boolean;
   creditCards: CreditCard[];
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
@@ -261,8 +260,7 @@ function PeriodCard({
   allPeriods,
   override,
   defaultPaycheckCents,
-  isCurrentPeriod,
-  plaidLinked,
+  bankLinked,
   creditCards,
   onUpdateOverride,
   onMoveBill,
@@ -380,13 +378,13 @@ function PeriodCard({
               >
                 ✏️
               </button>
-              {isCurrentPeriod && plaidLinked && (
+              {bankLinked && (
                 <button
                   className="btn-xs btn-inline"
                   onClick={handleUseCheckingBalance}
                   disabled={fetchingBalance}
-                  aria-label="Use Wells Fargo Checking balance as paycheck"
-                  title="Set paycheck to current Wells Fargo Checking balance"
+                  aria-label="Use checking account balance as paycheck"
+                  title="Set paycheck to current checking account balance"
                 >
                   {fetchingBalance ? '…' : '🏦'}
                 </button>
@@ -627,8 +625,6 @@ export default function PayPeriodsPage({
   onBankUnlinked,
   onCreditCardPaymentProcessed,
 }: Props) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-
   if (!settings) {
     return (
       <div className="empty-state">
@@ -661,8 +657,7 @@ export default function PayPeriodsPage({
             allPeriods={periods}
             override={overrides[p.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
-            isCurrentPeriod={p.startDate <= today && today <= p.endDate}
-            plaidLinked={bankLinked}
+            bankLinked={bankLinked}
             creditCards={creditCards}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>

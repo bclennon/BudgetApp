@@ -90,7 +90,7 @@ function loadSophtronScript(): Promise<void> {
 interface Props {
   settings: PaySettings | null;
   onSave: (settings: PaySettings) => void;
-  onBankLinked: () => void;
+  onBankLinked: (balanceCents?: number) => void;
 }
 
 export default function SettingsPage({ settings, onSave, onBankLinked }: Props) {
@@ -130,7 +130,23 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
         'saveSophtronUserInstitution'
       );
       await saveFn({ userInstitutionId });
-      onBankLinked();
+
+      // Immediately fetch the checking balance so the caller can update the
+      // current pay period's paycheck amount without requiring a manual step.
+      let balanceCents: number | undefined;
+      try {
+        const getBalanceFn = httpsCallable<Record<never, never>, { balanceCents: number }>(
+          functions,
+          'getCheckingBalance'
+        );
+        const result = await getBalanceFn({});
+        balanceCents = result.data.balanceCents;
+      } catch {
+        // Balance fetch is non-critical; the user can still click 🏦 on the
+        // Pay Periods page to set the balance manually.
+      }
+
+      onBankLinked(balanceCents);
     } catch (err: unknown) {
       setBankError(err instanceof Error ? err.message : 'Failed to link bank account.');
     } finally {
