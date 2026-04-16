@@ -19,9 +19,13 @@ function strToCents(value: string): number {
 }
 
 // Minimal type declarations for the Sophtron widget loader injected via CDN.
+// The Sophtron widget uses PascalCase field names matching its API responses
+// (e.g. Step, UserInstitutionID), but may also emit a normalized lowercase
+// `step` field in some widget versions. Both forms are accepted here.
 interface SophtronFinishData {
   _type: string;
-  step: string;
+  Step?: string;  // PascalCase from Sophtron API (e.g. 'LoginSuccess', 'LoginFailure')
+  step?: string;  // lowercase fallback used by some widget versions
   UserInstitutionID?: string;
   [key: string]: unknown;
 }
@@ -155,13 +159,17 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
           integration_key: integrationKey,
           request_id: requestId,
           onFinish: (data) => {
-            if (data.step === 'Success') {
+            // Accept both PascalCase Step (Sophtron API) and lowercase step
+            // (normalized widget format). The success step from the MFA polling
+            // response is 'LoginSuccess'; some widget versions emit 'Success'.
+            const step = data.Step ?? data.step;
+            if (step === 'LoginSuccess' || step === 'Success') {
               window.sophtron?.destroy();
               // Fire-and-forget; handleSophtronSuccess manages its own error state.
               handleSophtronSuccess(data);
               return true;
             }
-            if (data.step === 'Failure') {
+            if (step === 'LoginFailure' || step === 'Failure') {
               window.sophtron?.destroy();
               setBankError('Bank linking failed. Please try again.');
               return true;
