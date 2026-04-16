@@ -368,6 +368,15 @@ function PeriodCard({
   // same behaviour as marking a regular bill as processed.
   const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : totalCcPaymentCents);
 
+  // Total of all bills and CC payments that have NOT been marked as processed.
+  const billStatuses = override.billPaymentStatuses ?? {};
+  const unprocessedBillsCents = period.bills.reduce((sum, bip) => {
+    const key = bip.isOneTime ? bip.oneTimeBillId! : billKey(bip.bill.id);
+    return billStatuses[key] === 'processed' ? sum : sum + bip.bill.amountCents;
+  }, 0);
+  const unprocessedCcCents = isProcessed ? 0 : totalCcPaymentCents;
+  const totalUnprocessedCents = unprocessedBillsCents + unprocessedCcCents;
+
   // Use remaining days in the period for the current period so the rate
   // reflects how much can actually be spent from today forward.
   const isCurrentPeriod = today >= period.startDate && today <= period.endDate;
@@ -636,6 +645,13 @@ function PeriodCard({
 
           <tr className="row-divider">
             <td colSpan={2} />
+          </tr>
+
+          <tr className="row-unprocessed">
+            <td>Not processed</td>
+            <td className="amount neg">
+              -{formatCents(totalUnprocessedCents)}
+            </td>
           </tr>
 
           <tr className="row-remaining">
