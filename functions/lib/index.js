@@ -1,71 +1,83 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCheckingBalance = exports.exchangePublicToken = exports.createLinkToken = void 0;
+exports.getCheckingBalance = exports.saveSophtronUserInstitution = exports.getSophtronWidgetData = void 0;
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 const https_1 = require("firebase-functions/v2/https");
-const plaid_1 = require("plaid");
 admin.initializeApp();
-function getPlaidClient() {
-    const clientId = process.env.PLAID_CLIENT_ID;
-    const secret = process.env.PLAID_SECRET;
-    const env = process.env.PLAID_ENV ?? 'sandbox';
-    if (!clientId || !secret) {
-        throw new https_1.HttpsError('failed-precondition', 'Plaid credentials are not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.');
+const SOPHTRON_API_BASE = 'https://api.sophtron.com/api';
+/**
+ * Builds the Sophtron HMAC-based Authorization header value.
+ * Format: FIApiAUTH:{userId}:{base64Signature}:{authPath}
+ * where authPath is the last path segment of the URL (lowercase).
+ */
+function buildSophtronAuth(httpMethod, url) {
+    const userId = process.env.SOPHTRON_USER_ID;
+    const accessKey = process.env.SOPHTRON_ACCESS_KEY;
+    if (!userId || !accessKey) {
+        throw new https_1.HttpsError('failed-precondition', 'Sophtron credentials are not configured. Set SOPHTRON_USER_ID and SOPHTRON_ACCESS_KEY.');
     }
-    const config = new plaid_1.Configuration({
-        basePath: plaid_1.PlaidEnvironments[env],
-        baseOptions: {
-            headers: {
-                'PLAID-CLIENT-ID': clientId,
-                'PLAID-SECRET': secret,
-            },
+    const authPath = url.substring(url.lastIndexOf('/')).toLowerCase();
+    const integrationKey = Buffer.from(accessKey, 'base64');
+    const plainKey = httpMethod.toUpperCase() + '\n' + authPath;
+    const b64Sig = crypto.createHmac('sha256', integrationKey).update(plainKey).digest('base64');
+    return `FIApiAUTH:${userId}:${b64Sig}:${authPath}`;
+}
+/** Executes a POST request against the Sophtron API. */
+async function sophtronPost(path, body) {
+    const url = `${SOPHTRON_API_BASE}/${path}`;
+    const auth = buildSophtronAuth('POST', url);
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': auth,
         },
+        body: JSON.stringify(body),
     });
-    return new plaid_1.PlaidApi(config);
+    if (!response.ok) {
+        throw new https_1.HttpsError('internal', `Sophtron API error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
 }
 /**
- * Creates a Plaid Link token scoped to the `balance` product.
- * Returns `{ linkToken: string }`.
+ * Returns the Sophtron integration key and a unique request ID for a widget
+ * session. The client uses these to initialise the Sophtron widget.
+ * Returns `{ integrationKey: string, requestId: string }`.
  */
-exports.createLinkToken = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
+exports.getSophtronWidgetData = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'You must be signed in.');
     }
-    const plaid = getPlaidClient();
-    const response = await plaid.linkTokenCreate({
-        user: { client_user_id: request.auth.uid },
-        client_name: 'BudgetApp',
-        products: [plaid_1.Products.Balance],
-        country_codes: [plaid_1.CountryCode.Us],
-        language: 'en',
-    });
-    return { linkToken: response.data.link_token };
+    const userId = process.env.SOPHTRON_USER_ID;
+    if (!userId) {
+        throw new https_1.HttpsError('failed-precondition', 'Sophtron credentials are not configured. Set SOPHTRON_USER_ID and SOPHTRON_ACCESS_KEY.');
+    }
+    const result = await sophtronPost('User/GetUserIntegrationKey', { Id: userId });
+    const requestId = crypto.randomUUID();
+    return { integrationKey: result.IntegrationKey, requestId };
 });
 /**
- * Exchanges a Plaid public token for a persistent access token and stores it
- * in Firestore at `users/{uid}/plaid/token`.
- * Accepts `{ publicToken: string }`.
+ * Persists the Sophtron UserInstitutionID for the authenticated user in
+ * Firestore at `users/{uid}/sophtron/token`.
+ * Accepts `{ userInstitutionId: string }`.
  */
-exports.exchangePublicToken = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
+exports.saveSophtronUserInstitution = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'You must be signed in.');
     }
     const data = request.data;
-    if (!data.publicToken) {
-        throw new https_1.HttpsError('invalid-argument', 'publicToken is required.');
+    if (!data.userInstitutionId) {
+        throw new https_1.HttpsError('invalid-argument', 'userInstitutionId is required.');
     }
-    const plaid = getPlaidClient();
-    const response = await plaid.itemPublicTokenExchange({
-        public_token: data.publicToken,
-    });
     await admin
         .firestore()
-        .doc(`users/${request.auth.uid}/plaid/token`)
-        .set({ accessToken: response.data.access_token });
+        .doc(`users/${request.auth.uid}/sophtron/token`)
+        .set({ userInstitutionId: data.userInstitutionId });
     return { success: true };
 });
 /**
- * Fetches the current balance of the linked Wells Fargo Checking account.
+ * Fetches the current balance of the linked checking account via Sophtron.
  * Returns `{ balanceCents: number }`.
  */
 exports.getCheckingBalance = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
@@ -74,23 +86,24 @@ exports.getCheckingBalance = (0, https_1.onCall)({ cors: ['https://bclennon.gith
     }
     const snap = await admin
         .firestore()
-        .doc(`users/${request.auth.uid}/plaid/token`)
+        .doc(`users/${request.auth.uid}/sophtron/token`)
         .get();
     if (!snap.exists) {
         throw new https_1.HttpsError('not-found', 'No linked bank account found. Link your account in Settings.');
     }
-    const { accessToken } = snap.data();
-    const plaid = getPlaidClient();
-    const response = await plaid.accountsBalanceGet({ access_token: accessToken });
-    const checking = response.data.accounts.find((a) => a.type === plaid_1.AccountType.Depository && a.subtype === plaid_1.AccountSubtype.Checking);
+    const { userInstitutionId } = snap.data();
+    const accounts = await sophtronPost('UserInstitution/GetUserInstitutionAccounts', { UserInstitutionID: userInstitutionId });
+    if (!accounts || accounts.length === 0) {
+        throw new https_1.HttpsError('not-found', 'No accounts found on the linked institution.');
+    }
+    const checking = accounts.find((a) => a.AccountType && a.AccountType.toLowerCase().includes('checking'));
     if (!checking) {
         throw new https_1.HttpsError('not-found', 'No checking account found on the linked institution.');
     }
-    const current = checking.balances.current;
-    if (current === null || current === undefined) {
+    if (checking.AccountBalance === null || checking.AccountBalance === undefined) {
         throw new https_1.HttpsError('unavailable', 'Checking account balance is currently unavailable. Please try again later.');
     }
-    const balanceCents = Math.round(current * 100);
+    const balanceCents = Math.round(checking.AccountBalance * 100);
     return { balanceCents };
 });
 //# sourceMappingURL=index.js.map

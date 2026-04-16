@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { usePlaidLink } from 'react-plaid-link';
+import { useState, useEffect } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Frequency, PaySettings } from '../domain/models';
@@ -19,13 +18,77 @@ function strToCents(value: string): number {
   return Math.round(parseFloat(value) * 100);
 }
 
+// Minimal type declarations for the Sophtron widget loader injected via CDN.
+interface SophtronFinishData {
+  _type: string;
+  step: string;
+  UserInstitutionID?: string;
+  [key: string]: unknown;
+}
+
+interface SophtronWidgetConfig {
+  env: string;
+  integration_key: string;
+  request_id: string;
+  onFinish?: (data: SophtronFinishData) => boolean;
+  onError?: (data: unknown) => void;
+}
+
+interface SophtronWidget {
+  init: (action: string, config: SophtronWidgetConfig, reinit?: boolean) => void;
+  show: () => void;
+  destroy: () => void;
+}
+
+declare global {
+  interface Window {
+    sophtron?: SophtronWidget;
+  }
+}
+
+/** Dynamically loads the Sophtron widget script from the CDN if not yet loaded. */
+function loadSophtronScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.sophtron) {
+      resolve();
+      return;
+    }
+    const existingScript = document.getElementById(
+      'sophtron-widget-script'
+    ) as HTMLScriptElement | null;
+    if (existingScript) {
+      // If the script tag already exists but the load event has already fired
+      // (window.sophtron would be defined in that case, caught above), we still
+      // attach handlers for the in-flight loading case.
+      if (existingScript.dataset.loaded === 'true') {
+        resolve();
+        return;
+      }
+      existingScript.addEventListener('load', () => resolve());
+      existingScript.addEventListener('error', () =>
+        reject(new Error('Failed to load Sophtron widget.'))
+      );
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'sophtron-widget-script';
+    script.src = 'https://cdn.sophtron.com/sophtron-widget-loader-0.0.0.6.min.js';
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load Sophtron widget.'));
+    document.head.appendChild(script);
+  });
+}
+
 interface Props {
   settings: PaySettings | null;
   onSave: (settings: PaySettings) => void;
-  onPlaidLinked: () => void;
+  onBankLinked: () => void;
 }
 
-export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props) {
+export default function SettingsPage({ settings, onSave, onBankLinked }: Props) {
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
@@ -33,11 +96,10 @@ export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props)
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  // Plaid state
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [plaidLoading, setPlaidLoading] = useState(false);
-  const [plaidError, setPlaidError] = useState('');
-  const isLinked = settings?.plaidLinked ?? false;
+  // Bank linking state
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState('');
+  const isLinked = settings?.bankLinked ?? false;
 
   useEffect(() => {
     if (settings) {
@@ -48,58 +110,70 @@ export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props)
     }
   }, [settings]);
 
-  // ── Plaid Link ──────────────────────────────────────────────────────────
+  // ── Sophtron Link ──────────────────────────────────────────────────────────
 
-  async function handleLinkBankAccount() {
-    setPlaidError('');
-    setPlaidLoading(true);
+  async function handleSophtronSuccess(data: SophtronFinishData) {
+    const userInstitutionId = data.UserInstitutionID;
+    if (!userInstitutionId) {
+      setBankError('Bank linked but account ID was not returned. Please try again.');
+      return;
+    }
+    setBankLoading(true);
     try {
-      const createLinkToken = httpsCallable<Record<never, never>, { linkToken: string }>(
+      const saveFn = httpsCallable<{ userInstitutionId: string }, { success: boolean }>(
         functions,
-        'createLinkToken'
+        'saveSophtronUserInstitution'
       );
-      const result = await createLinkToken({});
-      setLinkToken(result.data.linkToken);
+      await saveFn({ userInstitutionId });
+      onBankLinked();
     } catch (err: unknown) {
-      setPlaidError(err instanceof Error ? err.message : 'Failed to start bank linking.');
+      setBankError(err instanceof Error ? err.message : 'Failed to link bank account.');
     } finally {
-      setPlaidLoading(false);
+      setBankLoading(false);
     }
   }
 
-  const onPlaidSuccess = useCallback(
-    async (publicToken: string) => {
-      setPlaidError('');
-      setPlaidLoading(true);
-      try {
-        const exchangePublicToken = httpsCallable<{ publicToken: string }, { success: boolean }>(
-          functions,
-          'exchangePublicToken'
-        );
-        await exchangePublicToken({ publicToken });
-        setLinkToken(null);
-        onPlaidLinked();
-      } catch (err: unknown) {
-        setPlaidError(err instanceof Error ? err.message : 'Failed to link bank account.');
-      } finally {
-        setPlaidLoading(false);
-      }
-    },
-    [onPlaidLinked]
-  );
+  async function handleLinkBankAccount() {
+    setBankError('');
+    setBankLoading(true);
+    try {
+      const getWidgetData = httpsCallable<
+        Record<never, never>,
+        { integrationKey: string; requestId: string }
+      >(functions, 'getSophtronWidgetData');
+      const result = await getWidgetData({});
+      const { integrationKey, requestId } = result.data;
 
-  const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
-    token: linkToken,
-    onSuccess: onPlaidSuccess,
-    onExit: () => setLinkToken(null),
-  });
+      await loadSophtronScript();
 
-  // Open the Plaid modal automatically once a link token is available.
-  useEffect(() => {
-    if (linkToken && plaidReady) {
-      openPlaidLink();
+      window.sophtron!.init(
+        'Add',
+        {
+          env: 'prod',
+          integration_key: integrationKey,
+          request_id: requestId,
+          onFinish: (data) => {
+            if (data.step === 'Success') {
+              window.sophtron?.destroy();
+              // Fire-and-forget; handleSophtronSuccess manages its own error state.
+              handleSophtronSuccess(data);
+              return true;
+            }
+            return false;
+          },
+          onError: () => {
+            setBankError('Bank linking failed. Please try again.');
+          },
+        },
+        true
+      );
+      window.sophtron!.show();
+    } catch (err: unknown) {
+      setBankError(err instanceof Error ? err.message : 'Failed to start bank linking.');
+    } finally {
+      setBankLoading(false);
     }
-  }, [linkToken, plaidReady, openPlaidLink]);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -185,20 +259,20 @@ export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props)
       <div className="card">
         <h2 className="card-title">Bank Account</h2>
         <p className="field-hint">
-          Link your Wells Fargo Checking account to use your current balance as the paycheck
+          Link your checking account to use your current balance as the paycheck
           amount for any pay period.
         </p>
-        {plaidError && <p className="form-error">{plaidError}</p>}
+        {bankError && <p className="form-error">{bankError}</p>}
         {isLinked ? (
-          <div className="plaid-status">
-            <span className="plaid-linked-badge">✓ Bank account linked</span>
+          <div className="bank-link-status">
+            <span className="bank-linked-badge">✓ Bank account linked</span>
             <button
               type="button"
               className="btn-secondary"
               onClick={handleLinkBankAccount}
-              disabled={plaidLoading}
+              disabled={bankLoading}
             >
-              {plaidLoading ? 'Connecting…' : 'Re-link Account'}
+              {bankLoading ? 'Connecting…' : 'Re-link Account'}
             </button>
           </div>
         ) : (
@@ -206,9 +280,9 @@ export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props)
             type="button"
             className="btn-primary"
             onClick={handleLinkBankAccount}
-            disabled={plaidLoading}
+            disabled={bankLoading}
           >
-            {plaidLoading ? 'Connecting…' : '🏦 Link Bank Account'}
+            {bankLoading ? 'Connecting…' : '🏦 Link Bank Account'}
           </button>
         )}
       </div>
