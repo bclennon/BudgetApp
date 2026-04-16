@@ -20,7 +20,6 @@ export interface PaySettings {
   paycheckAmountCents: number;
   frequency: Frequency;
   nextPayday: string; // "YYYY-MM-DD"
-  targetSpendingPerDayCents: number;
   bankLinked?: boolean; // true once a bank account has been linked via Sophtron
 }
 
@@ -87,9 +86,6 @@ export interface PayPeriod {
   remainingCents: number;
   daysInPeriod: number;
   spendingPerDayRaw: number;
-  displayedSpendingPerDay: number;
-  savingsTotalCents: number;
-  hasSavings: boolean;
 }
 
 export interface BackupData {

@@ -346,15 +346,17 @@ function PeriodCard({
   const isProcessed = override.creditCardPaymentStatus === 'processed';
 
   // When processed, use the amount that was stored at payment time; otherwise
-  // calculate against the current (adjusted) balance.
+  // calculate against the current (adjusted) balance up to remaining funds.
   const ccPaymentCents = isProcessed
     ? (override.creditCardPaymentAmountCents ?? 0)
-    : (priorityCard ? Math.min(period.savingsTotalCents, priorityCard.balanceCents) : 0);
+    : (priorityCard ? Math.min(period.remainingCents, priorityCard.balanceCents) : 0);
 
-  // Once a CC payment is processed, stop deducting it from savings and from
-  // Remaining — same behaviour as marking a regular bill as processed.
-  const savingsRemainderCents = period.savingsTotalCents - (isProcessed ? 0 : ccPaymentCents);
+  // Once a CC payment is processed, stop deducting it from Remaining —
+  // same behaviour as marking a regular bill as processed.
   const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : ccPaymentCents);
+  const effectiveSpendingPerDay = period.daysInPeriod > 0
+    ? Math.trunc(effectiveRemainingCents / period.daysInPeriod)
+    : 0;
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
@@ -582,41 +584,28 @@ function PeriodCard({
             />
           )}
 
-          {/* ── Credit card payment or Savings ── */}
-          {period.hasSavings && displayCard ? (
-            <>
-              <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
-                <td>
-                  → {displayCard.name}
-                  {displayCard.transferExpirationDate && (
-                    <span className="due-date"> (exp. {displayCard.transferExpirationDate})</span>
-                  )}
-                </td>
-                <td className="amount neg">
-                  -{formatCents(ccPaymentCents)}
-                  <button
-                    className={paymentStatusClassName(override.creditCardPaymentStatus)}
-                    onClick={handleToggleCreditCardPaymentStatus}
-                    aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
-                    title={paymentStatusTitle(override.creditCardPaymentStatus)}
-                  >
-                    {paymentStatusIcon(override.creditCardPaymentStatus)}
-                  </button>
-                </td>
-              </tr>
-              {savingsRemainderCents > 0 && (
-                <tr className="row-savings">
-                  <td>Savings</td>
-                  <td className="amount pos">+{formatCents(savingsRemainderCents)}</td>
-                </tr>
-              )}
-            </>
-          ) : period.hasSavings ? (
-            <tr className="row-savings">
-              <td>Savings</td>
-              <td className="amount pos">+{formatCents(period.savingsTotalCents)}</td>
+          {/* ── Credit card payment ── */}
+          {displayCard && (
+            <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
+              <td>
+                → {displayCard.name}
+                {displayCard.transferExpirationDate && (
+                  <span className="due-date"> (exp. {displayCard.transferExpirationDate})</span>
+                )}
+              </td>
+              <td className="amount neg">
+                -{formatCents(ccPaymentCents)}
+                <button
+                  className={paymentStatusClassName(override.creditCardPaymentStatus)}
+                  onClick={handleToggleCreditCardPaymentStatus}
+                  aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
+                  title={paymentStatusTitle(override.creditCardPaymentStatus)}
+                >
+                  {paymentStatusIcon(override.creditCardPaymentStatus)}
+                </button>
+              </td>
             </tr>
-          ) : null}
+          )}
 
           <tr className="row-divider">
             <td colSpan={2} />
@@ -631,8 +620,8 @@ function PeriodCard({
 
           <tr className="row-spending">
             <td>Spending / day</td>
-            <td className={`amount ${period.displayedSpendingPerDay < 0 ? 'neg' : ''}`}>
-              {formatCents(period.displayedSpendingPerDay)}
+            <td className={`amount ${effectiveSpendingPerDay < 0 ? 'neg' : ''}`}>
+              {formatCents(effectiveSpendingPerDay)}
             </td>
           </tr>
         </tbody>
@@ -686,9 +675,9 @@ export default function PayPeriodsPage({
   const periods = generatePayPeriods(settings, bills, 24, overrides);
 
   // Compute per-period adjusted credit card balances.
-  // When a period plans to pay savings toward a credit card (even before
-  // it is marked as submitted/processed), that amount is deducted from the
-  // running balance so that subsequent periods see the correct remaining debt.
+  // When a period plans to pay toward a credit card (even before it is marked
+  // as submitted/processed), that amount is deducted from the running balance
+  // so that subsequent periods see the correct remaining debt.
   // Periods whose payment is already 'processed' are skipped because the
   // CreditCard.balanceCents in app state has already been permanently reduced.
   const periodsWithCards = useMemo(() => {
@@ -698,12 +687,15 @@ export default function PayPeriodsPage({
       const adjustedCards = runningCards;
       const effectivePriorityCard = getPriorityCard(adjustedCards);
       const override = overrides[period.startDate];
-      if (period.hasSavings && effectivePriorityCard && override?.creditCardPaymentStatus !== 'processed') {
-        runningCards = runningCards.map((c) =>
-          c.id === effectivePriorityCard.id
-            ? { ...c, balanceCents: Math.max(0, c.balanceCents - period.savingsTotalCents) }
-            : c
-        );
+      if (effectivePriorityCard && override?.creditCardPaymentStatus !== 'processed') {
+        const planned = Math.min(period.remainingCents, effectivePriorityCard.balanceCents);
+        if (planned > 0) {
+          runningCards = runningCards.map((c) =>
+            c.id === effectivePriorityCard.id
+              ? { ...c, balanceCents: Math.max(0, c.balanceCents - planned) }
+              : c
+          );
+        }
       }
       result.push({ period, adjustedCards });
     }

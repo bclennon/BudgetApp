@@ -97,7 +97,6 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
-  const [targetSpending, setTargetSpending] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -111,7 +110,6 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
       setPaycheck(dollarsToStr(settings.paycheckAmountCents));
       setFrequency(settings.frequency);
       setNextPayday(settings.nextPayday);
-      setTargetSpending(dollarsToStr(settings.targetSpendingPerDayCents));
     }
   }, [settings]);
 
@@ -210,7 +208,6 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
     e.preventDefault();
     setError('');
     const paycheckCents = strToCents(paycheck);
-    const targetCents = strToCents(targetSpending);
     if (isNaN(paycheckCents) || paycheckCents <= 0) {
       setError('Enter a valid paycheck amount.');
       return;
@@ -219,11 +216,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
       setError('Select a next payday date.');
       return;
     }
-    if (isNaN(targetCents) || targetCents < 0) {
-      setError('Enter a valid target spending amount.');
-      return;
-    }
-    onSave({ paycheckAmountCents: paycheckCents, frequency, nextPayday, targetSpendingPerDayCents: targetCents });
+    onSave({ paycheckAmountCents: paycheckCents, frequency, nextPayday });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -264,21 +257,6 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
               value={nextPayday}
               onChange={(e) => setNextPayday(e.target.value)}
             />
-          </div>
-
-          <div className="form-group">
-            <label>Target Spending / Day ($)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={targetSpending}
-              onChange={(e) => setTargetSpending(e.target.value)}
-              placeholder="0.00"
-            />
-            <p className="field-hint">
-              When daily spending exceeds this target, the extra becomes savings.
-            </p>
           </div>
 
           <div className="form-actions">

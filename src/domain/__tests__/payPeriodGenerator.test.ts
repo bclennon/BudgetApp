@@ -6,9 +6,8 @@ function makeSettings(
   nextPayday: string,
   frequency: PaySettings['frequency'],
   paycheckCents = 300000,
-  targetCents = 10000
 ): PaySettings {
-  return { paycheckAmountCents: paycheckCents, frequency, nextPayday, targetSpendingPerDayCents: targetCents };
+  return { paycheckAmountCents: paycheckCents, frequency, nextPayday };
 }
 
 describe('generatePayPeriods', () => {
