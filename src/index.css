@@ -185,6 +185,7 @@ body,
 .row-bill td      { color: var(--gray-700); }
 .row-savings td   { color: var(--green); font-style: italic; }
 .row-divider td   { border-top: 1px solid var(--gray-200); height: 6px; padding: 0; }
+.row-unprocessed td { color: var(--gray-500); font-size: 0.85rem; }
 .row-remaining td { font-weight: 700; font-size: 0.95rem; }
 .row-spending td  { color: var(--gray-500); font-size: 0.85rem; }
 
