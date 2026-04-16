@@ -591,8 +591,8 @@ function PeriodCard({
                     <span className="due-date"> (exp. {displayCard.transferExpirationDate})</span>
                   )}
                 </td>
-                <td className="amount pos">
-                  +{formatCents(ccPaymentCents)}
+                <td className="amount neg">
+                  -{formatCents(ccPaymentCents)}
                   <button
                     className={paymentStatusClassName(override.creditCardPaymentStatus)}
                     onClick={handleToggleCreditCardPaymentStatus}
