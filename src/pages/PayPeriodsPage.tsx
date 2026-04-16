@@ -3,7 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Bill, CreditCard, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
 import { emptyOverride, getPriorityCard } from '../domain/models';
-import { generatePayPeriods } from '../domain/payPeriodGenerator';
+import { generatePayPeriods, daysBetween } from '../domain/payPeriodGenerator';
 import { resolveDueDate } from '../domain/billDueDateResolver';
 
 function formatCents(cents: number): string {
@@ -248,6 +248,7 @@ interface PeriodCardProps {
   defaultPaycheckCents: number;
   bankLinked: boolean;
   creditCards: CreditCard[];
+  today: string;
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
@@ -263,6 +264,7 @@ function PeriodCard({
   defaultPaycheckCents,
   bankLinked,
   creditCards,
+  today,
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
@@ -354,9 +356,15 @@ function PeriodCard({
   // Once a CC payment is processed, stop deducting it from Remaining —
   // same behaviour as marking a regular bill as processed.
   const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : ccPaymentCents);
-  const effectiveSpendingPerDay = period.hasSurplus
-    ? period.displayedSpendingPerDay
-    : (period.daysInPeriod > 0 ? Math.trunc(effectiveRemainingCents / period.daysInPeriod) : 0);
+
+  // Use remaining days in the period for the current period so the rate
+  // reflects how much can actually be spent from today forward.
+  const isCurrentPeriod = today >= period.startDate && today <= period.endDate;
+  const remainingDays = isCurrentPeriod
+    ? daysBetween(today, period.endDate) + 1
+    : period.daysInPeriod;
+  const effectiveDays = Math.max(1, remainingDays);
+  const effectiveSpendingPerDay = Math.trunc(effectiveRemainingCents / effectiveDays);
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
@@ -674,6 +682,9 @@ export default function PayPeriodsPage({
 
   const periods = generatePayPeriods(settings, bills, 24, overrides);
 
+  const todayDate = new Date();
+  const today = todayDate.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
   // Compute per-period adjusted credit card balances.
   // When a period plans to pay toward a credit card (even before it is marked
   // as submitted/processed), that amount is deducted from the running balance
@@ -725,6 +736,7 @@ export default function PayPeriodsPage({
             override={overrides[period.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
             creditCards={adjustedCards}
+            today={today}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(period.startDate, patch)}
             bankLinked={bankLinked}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>

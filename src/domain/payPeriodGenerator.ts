@@ -12,7 +12,7 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function daysBetween(start: string, end: string): number {
+export function daysBetween(start: string, end: string): number {
   const s = new Date(start + 'T00:00:00Z');
   const e = new Date(end + 'T00:00:00Z');
   return Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
