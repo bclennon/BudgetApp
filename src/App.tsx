@@ -11,6 +11,7 @@ import {
   loadCreditCardsFromCloud, saveCreditCardsToCloud,
 } from './data/storage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ThemeProvider } from './theme/ThemeContext';
 import SignInPage from './pages/SignInPage';
 import PayPeriodsPage from './pages/PayPeriodsPage';
 import BillsPage from './pages/BillsPage';
@@ -336,9 +337,11 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppShell />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

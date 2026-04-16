@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Frequency, PaySettings } from '../domain/models';
+import { useTheme, type Theme } from '../theme/ThemeContext';
+
+const THEME_OPTIONS: { value: Theme; label: string; icon: string }[] = [
+  { value: 'system', label: 'System', icon: '💻' },
+  { value: 'light',  label: 'Light',  icon: '☀️' },
+  { value: 'dark',   label: 'Dark',   icon: '🌙' },
+];
 
 const FREQUENCY_LABELS: Record<Frequency, string> = {
   WEEKLY: 'Weekly',
@@ -94,6 +101,7 @@ interface Props {
 }
 
 export default function SettingsPage({ settings, onSave, onBankLinked }: Props) {
+  const { theme, setTheme } = useTheme();
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
@@ -316,6 +324,24 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
             {bankLoading ? 'Connecting…' : '🏦 Link Bank Account'}
           </button>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="card-title">Appearance</h2>
+        <p className="card-desc">Choose your preferred color theme.</p>
+        <div className="theme-picker">
+          {THEME_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`theme-btn${theme === opt.value ? ' active' : ''}`}
+              onClick={() => setTheme(opt.value)}
+            >
+              <span className="theme-btn-icon">{opt.icon}</span>
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
