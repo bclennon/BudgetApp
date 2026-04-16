@@ -351,9 +351,10 @@ function PeriodCard({
     ? (override.creditCardPaymentAmountCents ?? 0)
     : (priorityCard ? Math.min(period.savingsTotalCents, priorityCard.balanceCents) : 0);
 
-  // Bug 2 fix: once a CC payment is processed, stop deducting it from savings
-  // (same behaviour as marking a regular bill as processed).
+  // Once a CC payment is processed, stop deducting it from savings and from
+  // Remaining — same behaviour as marking a regular bill as processed.
   const savingsRemainderCents = period.savingsTotalCents - (isProcessed ? 0 : ccPaymentCents);
+  const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : ccPaymentCents);
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
@@ -623,8 +624,8 @@ function PeriodCard({
 
           <tr className="row-remaining">
             <td>Remaining</td>
-            <td className={`amount ${period.remainingCents < 0 ? 'neg' : 'pos'}`}>
-              {formatCents(period.remainingCents)}
+            <td className={`amount ${effectiveRemainingCents < 0 ? 'neg' : 'pos'}`}>
+              {formatCents(effectiveRemainingCents)}
             </td>
           </tr>
 
