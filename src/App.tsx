@@ -100,6 +100,11 @@ function AppShell() {
     updateSettings({ ...settings, plaidLinked: true });
   }
 
+  function handlePlaidUnlinked() {
+    if (!settings) return;
+    updateSettings({ ...settings, plaidLinked: false });
+  }
+
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
     const updated = [...bills];
     for (const item of items) {
@@ -227,6 +232,7 @@ function AppShell() {
             onUnmoveBill={unmoveBill}
             onUndo={undo}
             canUndo={undoHistory.length > 0}
+            onPlaidUnlinked={handlePlaidUnlinked}
           />
         )}
         {tab === 'bills' && (

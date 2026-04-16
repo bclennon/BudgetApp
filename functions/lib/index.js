@@ -86,7 +86,11 @@ exports.getCheckingBalance = (0, https_1.onCall)(async (request) => {
     if (!checking) {
         throw new https_1.HttpsError('not-found', 'No checking account found on the linked institution.');
     }
-    const balanceCents = Math.round((checking.balances.current ?? 0) * 100);
+    const current = checking.balances.current;
+    if (current === null || current === undefined) {
+        throw new https_1.HttpsError('unavailable', 'Checking account balance is currently unavailable. Please try again later.');
+    }
+    const balanceCents = Math.round(current * 100);
     return { balanceCents };
 });
 //# sourceMappingURL=index.js.map

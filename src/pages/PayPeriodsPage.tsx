@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Bill, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
@@ -251,6 +251,7 @@ interface PeriodCardProps {
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
+  onPlaidUnlinked: () => void;
 }
 
 function PeriodCard({
@@ -263,6 +264,7 @@ function PeriodCard({
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
+  onPlaidUnlinked,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
@@ -303,7 +305,13 @@ function PeriodCard({
       const result = await getCheckingBalance({});
       onUpdateOverride({ paycheckAmountCents: result.data.balanceCents });
     } catch (err: unknown) {
-      setBalanceError(err instanceof Error ? err.message : 'Failed to fetch balance.');
+      const msg = err instanceof Error ? err.message : 'Failed to fetch balance.';
+      setBalanceError(msg);
+      // If the token no longer exists in Firestore, reset the linked status so
+      // the user is prompted to re-link in Settings.
+      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'functions/not-found') {
+        onPlaidUnlinked();
+      }
     } finally {
       setFetchingBalance(false);
     }
@@ -562,6 +570,7 @@ interface Props {
   onUnmoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string) => void;
   onUndo: () => void;
   canUndo: boolean;
+  onPlaidUnlinked: () => void;
 }
 
 export default function PayPeriodsPage({
@@ -574,7 +583,10 @@ export default function PayPeriodsPage({
   onUnmoveBill,
   onUndo,
   canUndo,
+  onPlaidUnlinked,
 }: Props) {
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
   if (!settings) {
     return (
       <div className="empty-state">
@@ -584,7 +596,6 @@ export default function PayPeriodsPage({
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
   const periods = generatePayPeriods(settings, bills, 24, overrides);
 
   return (
@@ -617,6 +628,7 @@ export default function PayPeriodsPage({
             onUnmoveBill={(billId, fromPeriodStart) =>
               onUnmoveBill(billId, fromPeriodStart, p.startDate)
             }
+            onPlaidUnlinked={onPlaidUnlinked}
           />
         ))}
       </div>
