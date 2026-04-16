@@ -5,6 +5,9 @@ import PayPeriodsPage from './pages/PayPeriodsPage';
 import BillsPage from './pages/BillsPage';
 import SettingsPage from './pages/SettingsPage';
 import BackupSyncPage from './pages/BackupSyncPage';
+import LoginPage from './pages/LoginPage';
+import { useAuth } from './auth/useAuth';
+import { googleLogout } from '@react-oauth/google';
 
 type Tab = 'periods' | 'bills' | 'settings' | 'backup';
 
@@ -16,9 +19,14 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ];
 
 export default function App() {
+  const { user, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('periods');
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
+
+  if (!user) {
+    return <LoginPage />;
+  }
 
   function addBill(name: string, dayOfMonth: number, amountCents: number) {
     const updated = [...bills, { id: getNextBillId(bills), name, dayOfMonth, amountCents }];
@@ -61,6 +69,11 @@ export default function App() {
     }
   }
 
+  function handleSignOut() {
+    googleLogout();
+    signOut();
+  }
+
   return (
     <div className="app">
       <nav className="tab-bar">
@@ -74,6 +87,10 @@ export default function App() {
             <span className="tab-label">{t.label}</span>
           </button>
         ))}
+        <button className="tab-btn user-btn" onClick={handleSignOut} title={`Sign out (${user.email})`}>
+          <img src={user.picture} alt={user.name} className="user-avatar" />
+          <span className="tab-label">Sign Out</span>
+        </button>
       </nav>
 
       <main className="content">

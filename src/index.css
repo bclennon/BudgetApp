@@ -322,3 +322,54 @@
   .tab-label { display: none; }
   .tab-btn   { gap: 0; }
 }
+
+/* ── Login ────────────────────────────────────────────────────── */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: var(--gray-50);
+  padding: 16px;
+}
+
+.login-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.10);
+  padding: 40px 32px;
+  text-align: center;
+  max-width: 360px;
+  width: 100%;
+}
+
+.login-logo { font-size: 3rem; margin-bottom: 12px; }
+
+.login-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 8px;
+}
+
+.login-subtitle {
+  font-size: 0.95rem;
+  color: var(--gray-500);
+  margin-bottom: 28px;
+}
+
+.login-btn-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+/* ── User avatar in nav ──────────────────────────────────────── */
+.user-btn { flex: none; padding: 6px 10px; }
+
+.user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
