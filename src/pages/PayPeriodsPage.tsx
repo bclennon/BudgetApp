@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Bill, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride } from '../domain/models';
+import type { Bill, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
 import { emptyOverride } from '../domain/models';
 import { generatePayPeriods } from '../domain/payPeriodGenerator';
 import { resolveDueDate } from '../domain/billDueDateResolver';
@@ -209,6 +209,26 @@ function AddOneTimeBillRow({ periodStart, periodEnd, onAdd, onCancel }: AddOneTi
   );
 }
 
+// ── Payment status helpers ─────────────────────────────────────────────────
+
+function nextPaymentStatus(current: BillPaymentStatus | undefined): BillPaymentStatus | undefined {
+  if (!current) return 'submitted';
+  if (current === 'submitted') return 'processed';
+  return undefined;
+}
+
+function paymentStatusIcon(status: BillPaymentStatus | undefined): string {
+  if (status === 'submitted') return '⏳';
+  if (status === 'processed') return '✓';
+  return '○';
+}
+
+function paymentStatusTitle(status: BillPaymentStatus | undefined): string {
+  if (status === 'submitted') return 'Payment submitted – click to mark as processed';
+  if (status === 'processed') return 'Payment processed – click to clear';
+  return 'Mark as payment submitted';
+}
+
 // ── Period card ────────────────────────────────────────────────────────────
 
 interface PeriodCardProps {
@@ -256,6 +276,19 @@ function PeriodCard({
     onUpdateOverride({ oneTimeBills: override.oneTimeBills.filter((b) => b.id !== id) });
   }
 
+  function handleTogglePaymentStatus(billKey: string) {
+    const statuses = override.billPaymentStatuses ?? {};
+    const current = statuses[billKey];
+    const next = nextPaymentStatus(current);
+    const updated = { ...statuses };
+    if (next === undefined) {
+      delete updated[billKey];
+    } else {
+      updated[billKey] = next;
+    }
+    onUpdateOverride({ billPaymentStatuses: updated });
+  }
+
   // Separate bill types for rendering
   const regularBills = period.bills.filter((b) => !b.isOneTime && !b.movedFromPeriod);
   const movedInBills = period.bills.filter((b) => b.movedFromPeriod !== undefined);
@@ -301,25 +334,37 @@ function PeriodCard({
           )}
 
           {/* ── Regular recurring bills ── */}
-          {regularBills.map(({ bill, dueDate }) => (
-            <tr key={`r-${bill.id}`} className="row-bill">
-              <td>
-                {bill.name}
-                <span className="due-date"> (due {formatDate(dueDate)})</span>
-              </td>
-              <td className="amount neg">
-                -{formatCents(bill.amountCents)}
-                <button
-                  className="btn-xs btn-inline"
-                  onClick={() => setMovingBillId(movingBillId === bill.id ? null : bill.id)}
-                  aria-label="Move bill to another period"
-                  title="Move to another pay period"
-                >
-                  ↔
-                </button>
-              </td>
-            </tr>
-          ))}
+          {regularBills.map(({ bill, dueDate }) => {
+            const billKey = String(bill.id);
+            const status = (override.billPaymentStatuses ?? {})[billKey];
+            return (
+              <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : ''}`}>
+                <td>
+                  {bill.name}
+                  <span className="due-date"> (due {formatDate(dueDate)})</span>
+                </td>
+                <td className="amount neg">
+                  -{formatCents(bill.amountCents)}
+                  <button
+                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
+                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    aria-label={paymentStatusTitle(status)}
+                    title={paymentStatusTitle(status)}
+                  >
+                    {paymentStatusIcon(status)}
+                  </button>
+                  <button
+                    className="btn-xs btn-inline"
+                    onClick={() => setMovingBillId(movingBillId === bill.id ? null : bill.id)}
+                    aria-label="Move bill to another period"
+                    title="Move to another pay period"
+                  >
+                    ↔
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
           {movingBillId !== null && regularBills.some((b) => b.bill.id === movingBillId) && (() => {
             const moving = regularBills.find((b) => b.bill.id === movingBillId)!;
             return (
@@ -335,48 +380,72 @@ function PeriodCard({
           })()}
 
           {/* ── Bills moved in from other periods ── */}
-          {movedInBills.map(({ bill, dueDate, movedFromPeriod }, idx) => (
-            <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className="row-bill row-moved">
-              <td>
-                {bill.name}
-                <span className="due-date"> (due {formatDate(dueDate)})</span>
-                <span className="moved-tag"> ↔ moved</span>
-              </td>
-              <td className="amount neg">
-                -{formatCents(bill.amountCents)}
-                <button
-                  className="btn-xs btn-inline btn-danger-xs"
-                  onClick={() => onUnmoveBill(bill.id, movedFromPeriod!)}
-                  aria-label="Cancel move"
-                  title="Move bill back to original period"
-                >
-                  ↩
-                </button>
-              </td>
-            </tr>
-          ))}
+          {movedInBills.map(({ bill, dueDate, movedFromPeriod }, idx) => {
+            const billKey = String(bill.id);
+            const status = (override.billPaymentStatuses ?? {})[billKey];
+            return (
+              <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : ''}`}>
+                <td>
+                  {bill.name}
+                  <span className="due-date"> (due {formatDate(dueDate)})</span>
+                  <span className="moved-tag"> ↔ moved</span>
+                </td>
+                <td className="amount neg">
+                  -{formatCents(bill.amountCents)}
+                  <button
+                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
+                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    aria-label={paymentStatusTitle(status)}
+                    title={paymentStatusTitle(status)}
+                  >
+                    {paymentStatusIcon(status)}
+                  </button>
+                  <button
+                    className="btn-xs btn-inline btn-danger-xs"
+                    onClick={() => onUnmoveBill(bill.id, movedFromPeriod!)}
+                    aria-label="Cancel move"
+                    title="Move bill back to original period"
+                  >
+                    ↩
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
 
           {/* ── One-time bills ── */}
-          {oneTimeBills.map(({ bill, dueDate, oneTimeBillId }) => (
-            <tr key={`ot-${oneTimeBillId}`} className="row-bill row-one-time">
-              <td>
-                {bill.name}
-                <span className="due-date"> (due {formatDate(dueDate)})</span>
-                <span className="one-time-tag"> ✦ one-time</span>
-              </td>
-              <td className="amount neg">
-                -{formatCents(bill.amountCents)}
-                <button
-                  className="btn-xs btn-inline btn-danger-xs"
-                  onClick={() => handleDeleteOneTime(oneTimeBillId!)}
-                  aria-label="Delete one-time bill"
-                  title="Remove this one-time bill"
-                >
-                  🗑
-                </button>
-              </td>
-            </tr>
-          ))}
+          {oneTimeBills.map(({ bill, dueDate, oneTimeBillId }) => {
+            const billKey = oneTimeBillId!;
+            const status = (override.billPaymentStatuses ?? {})[billKey];
+            return (
+              <tr key={`ot-${oneTimeBillId}`} className={`row-bill row-one-time${status === 'processed' ? ' row-bill-processed' : ''}`}>
+                <td>
+                  {bill.name}
+                  <span className="due-date"> (due {formatDate(dueDate)})</span>
+                  <span className="one-time-tag"> ✦ one-time</span>
+                </td>
+                <td className="amount neg">
+                  -{formatCents(bill.amountCents)}
+                  <button
+                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
+                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    aria-label={paymentStatusTitle(status)}
+                    title={paymentStatusTitle(status)}
+                  >
+                    {paymentStatusIcon(status)}
+                  </button>
+                  <button
+                    className="btn-xs btn-inline btn-danger-xs"
+                    onClick={() => handleDeleteOneTime(oneTimeBillId!)}
+                    aria-label="Delete one-time bill"
+                    title="Remove this one-time bill"
+                  >
+                    🗑
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
 
           {/* ── Add one-time bill ── */}
           {!addingOneTime ? (

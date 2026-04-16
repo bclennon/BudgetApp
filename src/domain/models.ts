@@ -1,5 +1,7 @@
 export type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'SEMI_MONTHLY' | 'MONTHLY';
 
+export type BillPaymentStatus = 'submitted' | 'processed';
+
 export interface Bill {
   id: number;
   name: string;
@@ -28,6 +30,8 @@ export interface PayPeriodOverride {
   oneTimeBills: OneTimeBill[];  // manually added one-time bills
   movedInBills: { billId: number; fromPeriodStart: string; dueDate: string }[]; // recurring bills moved into this period
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
+  /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
+  billPaymentStatuses: Record<string, BillPaymentStatus>;
 }
 
 /** Map of period startDate → override. */
@@ -35,7 +39,7 @@ export type PeriodOverrides = Record<string, PayPeriodOverride>;
 
 /** Returns a blank PayPeriodOverride (no changes). */
 export function emptyOverride(): PayPeriodOverride {
-  return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [] };
+  return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} };
 }
 
 export interface BillInPeriod {
