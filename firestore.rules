@@ -1,9 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Plaid access tokens must never be readable or writable from the client.
-    // They are written and read exclusively by Cloud Functions via the Admin SDK.
-    match /users/{userId}/plaid/{document=**} {
+    // Sophtron user institution IDs must never be readable or writable from the
+    // client. They are written and read exclusively by Cloud Functions via the
+    // Admin SDK.
+    match /users/{userId}/sophtron/{document=**} {
       allow read, write: if false;
     }
 

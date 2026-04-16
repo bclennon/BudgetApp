@@ -95,14 +95,14 @@ function AppShell() {
     if (user) saveSettingsToCloud(user.uid, s);
   }
 
-  function handlePlaidLinked() {
+  function handleBankLinked() {
     if (!settings) return;
-    updateSettings({ ...settings, plaidLinked: true });
+    updateSettings({ ...settings, bankLinked: true });
   }
 
-  function handlePlaidUnlinked() {
+  function handleBankUnlinked() {
     if (!settings) return;
-    updateSettings({ ...settings, plaidLinked: false });
+    updateSettings({ ...settings, bankLinked: false });
   }
 
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
@@ -226,19 +226,19 @@ function AppShell() {
             bills={bills}
             settings={settings}
             overrides={periodOverrides}
-            plaidLinked={settings?.plaidLinked ?? false}
+            bankLinked={settings?.bankLinked ?? false}
             onUpdatePeriodOverride={updatePeriodOverride}
             onMoveBill={moveBill}
             onUnmoveBill={unmoveBill}
             onUndo={undo}
             canUndo={undoHistory.length > 0}
-            onPlaidUnlinked={handlePlaidUnlinked}
+            onBankUnlinked={handleBankUnlinked}
           />
         )}
         {tab === 'bills' && (
           <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} onImportBills={importBills} />
         )}
-        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onPlaidLinked={handlePlaidLinked} />}
+        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onBankLinked={handleBankLinked} />}
         {tab === 'backup' && (
           <BackupSyncPage bills={bills} settings={settings} onImport={importData} />
         )}

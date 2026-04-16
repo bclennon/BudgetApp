@@ -14,7 +14,7 @@ export interface PaySettings {
   frequency: Frequency;
   nextPayday: string; // "YYYY-MM-DD"
   targetSpendingPerDayCents: number;
-  plaidLinked?: boolean; // true once a bank account has been linked via Plaid
+  bankLinked?: boolean; // true once a bank account has been linked via Sophtron
 }
 
 /** A bill manually added to a specific pay period (not recurring). */

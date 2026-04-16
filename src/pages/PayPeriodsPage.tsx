@@ -251,7 +251,7 @@ interface PeriodCardProps {
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
-  onPlaidUnlinked: () => void;
+  onBankUnlinked: () => void;
 }
 
 function PeriodCard({
@@ -264,7 +264,7 @@ function PeriodCard({
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
-  onPlaidUnlinked,
+  onBankUnlinked,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
@@ -310,7 +310,7 @@ function PeriodCard({
       // If the token no longer exists in Firestore, reset the linked status so
       // the user is prompted to re-link in Settings.
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'functions/not-found') {
-        onPlaidUnlinked();
+        onBankUnlinked();
       }
     } finally {
       setFetchingBalance(false);
@@ -564,26 +564,26 @@ interface Props {
   bills: Bill[];
   settings: PaySettings | null;
   overrides: PeriodOverrides;
-  plaidLinked: boolean;
+  bankLinked: boolean;
   onUpdatePeriodOverride: (periodStart: string, patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string) => void;
   onUndo: () => void;
   canUndo: boolean;
-  onPlaidUnlinked: () => void;
+  onBankUnlinked: () => void;
 }
 
 export default function PayPeriodsPage({
   bills,
   settings,
   overrides,
-  plaidLinked,
+  bankLinked,
   onUpdatePeriodOverride,
   onMoveBill,
   onUnmoveBill,
   onUndo,
   canUndo,
-  onPlaidUnlinked,
+  onBankUnlinked,
 }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -620,7 +620,7 @@ export default function PayPeriodsPage({
             override={overrides[p.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
             isCurrentPeriod={p.startDate <= today && today <= p.endDate}
-            plaidLinked={plaidLinked}
+            plaidLinked={bankLinked}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, p.startDate, toPeriodStart, toDueDate)
@@ -628,7 +628,7 @@ export default function PayPeriodsPage({
             onUnmoveBill={(billId, fromPeriodStart) =>
               onUnmoveBill(billId, fromPeriodStart, p.startDate)
             }
-            onPlaidUnlinked={onPlaidUnlinked}
+            onBankUnlinked={onBankUnlinked}
           />
         ))}
       </div>
