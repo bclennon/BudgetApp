@@ -50,7 +50,11 @@ export async function loadBillsFromCloud(uid: string): Promise<Bill[] | null> {
 }
 
 export async function saveBillsToCloud(uid: string, bills: Bill[]): Promise<void> {
-  await setDoc(doc(db, 'users', uid, 'data', 'bills'), { bills });
+  try {
+    await setDoc(doc(db, 'users', uid, 'data', 'bills'), { bills });
+  } catch (err) {
+    console.error('Failed to save bills to cloud:', err);
+  }
 }
 
 export async function loadSettingsFromCloud(uid: string): Promise<PaySettings | null> {
@@ -64,6 +68,10 @@ export async function loadSettingsFromCloud(uid: string): Promise<PaySettings | 
 }
 
 export async function saveSettingsToCloud(uid: string, settings: PaySettings): Promise<void> {
-  await setDoc(doc(db, 'users', uid, 'data', 'settings'), { settings });
+  try {
+    await setDoc(doc(db, 'users', uid, 'data', 'settings'), { settings });
+  } catch (err) {
+    console.error('Failed to save settings to cloud:', err);
+  }
 }
 
