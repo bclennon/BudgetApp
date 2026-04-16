@@ -450,6 +450,29 @@
 /* One-time bill row: slightly highlighted */
 .row-one-time td { color: var(--gray-700); font-style: italic; }
 
+/* Payment status button */
+.btn-payment-status {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  border-color: transparent;
+}
+.btn-payment-status:hover { background: var(--gray-100); border-color: var(--gray-200); }
+
+.btn-payment-submitted {
+  color: #D97706;
+}
+.btn-payment-submitted:hover { background: #FFFBEB; border-color: #D97706; }
+
+.btn-payment-processed {
+  color: var(--green);
+  font-weight: 700;
+}
+.btn-payment-processed:hover { background: var(--green-light); border-color: var(--green); }
+
+/* Processed bill row: muted to indicate done */
+.row-bill-processed td { color: var(--gray-400); text-decoration: line-through; }
+.row-bill-processed .btn-payment-processed { text-decoration: none; }
+
 @media (min-width: 640px) {
   .tab-btn { font-size: 0.8rem; padding: 12px 8px; }
   .tab-icon { font-size: 1.3rem; }
