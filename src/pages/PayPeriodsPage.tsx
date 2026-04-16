@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
-import type { Bill, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
-import { emptyOverride } from '../domain/models';
+import type { Bill, CreditCard, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
+import { emptyOverride, getPriorityCard } from '../domain/models';
 import { generatePayPeriods } from '../domain/payPeriodGenerator';
 import { resolveDueDate } from '../domain/billDueDateResolver';
 
@@ -248,10 +248,12 @@ interface PeriodCardProps {
   defaultPaycheckCents: number;
   isCurrentPeriod: boolean;
   plaidLinked: boolean;
+  creditCards: CreditCard[];
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
   onBankUnlinked: () => void;
+  onCreditCardPaymentProcessed: (cardId: string, amountCents: number) => void;
 }
 
 function PeriodCard({
@@ -261,10 +263,12 @@ function PeriodCard({
   defaultPaycheckCents,
   isCurrentPeriod,
   plaidLinked,
+  creditCards,
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
   onBankUnlinked,
+  onCreditCardPaymentProcessed,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
@@ -329,6 +333,20 @@ function PeriodCard({
     }
     onUpdateOverride({ billPaymentStatuses: updated });
   }
+
+  function handleToggleCreditCardPaymentStatus() {
+    const current = override.creditCardPaymentStatus;
+    const next = nextPaymentStatus(current);
+    if (next === 'processed') {
+      const priorityCard = getPriorityCard(creditCards);
+      if (priorityCard) {
+        onCreditCardPaymentProcessed(priorityCard.id, period.savingsTotalCents);
+      }
+    }
+    onUpdateOverride({ creditCardPaymentStatus: next });
+  }
+
+  const priorityCard = getPriorityCard(creditCards);
 
   // Separate bill types for rendering
   const regularBills = period.bills.filter((b) => !b.isOneTime && !b.movedFromPeriod);
@@ -527,13 +545,33 @@ function PeriodCard({
             />
           )}
 
-          {/* ── Savings ── */}
-          {period.hasSavings && (
+          {/* ── Credit card payment or Savings ── */}
+          {period.hasSavings && priorityCard ? (
+            <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
+              <td>
+                → {priorityCard.name}
+                {priorityCard.transferExpirationDate && (
+                  <span className="due-date"> (exp. {priorityCard.transferExpirationDate})</span>
+                )}
+              </td>
+              <td className="amount pos">
+                +{formatCents(period.savingsTotalCents)}
+                <button
+                  className={paymentStatusClassName(override.creditCardPaymentStatus)}
+                  onClick={handleToggleCreditCardPaymentStatus}
+                  aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
+                  title={paymentStatusTitle(override.creditCardPaymentStatus)}
+                >
+                  {paymentStatusIcon(override.creditCardPaymentStatus)}
+                </button>
+              </td>
+            </tr>
+          ) : period.hasSavings ? (
             <tr className="row-savings">
               <td>Savings</td>
               <td className="amount pos">+{formatCents(period.savingsTotalCents)}</td>
             </tr>
-          )}
+          ) : null}
 
           <tr className="row-divider">
             <td colSpan={2} />
@@ -565,12 +603,14 @@ interface Props {
   settings: PaySettings | null;
   overrides: PeriodOverrides;
   bankLinked: boolean;
+  creditCards: CreditCard[];
   onUpdatePeriodOverride: (periodStart: string, patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string) => void;
   onUndo: () => void;
   canUndo: boolean;
   onBankUnlinked: () => void;
+  onCreditCardPaymentProcessed: (periodStart: string, cardId: string, amountCents: number) => void;
 }
 
 export default function PayPeriodsPage({
@@ -578,12 +618,14 @@ export default function PayPeriodsPage({
   settings,
   overrides,
   bankLinked,
+  creditCards,
   onUpdatePeriodOverride,
   onMoveBill,
   onUnmoveBill,
   onUndo,
   canUndo,
   onBankUnlinked,
+  onCreditCardPaymentProcessed,
 }: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -621,6 +663,7 @@ export default function PayPeriodsPage({
             defaultPaycheckCents={settings.paycheckAmountCents}
             isCurrentPeriod={p.startDate <= today && today <= p.endDate}
             plaidLinked={bankLinked}
+            creditCards={creditCards}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, p.startDate, toPeriodStart, toDueDate)
@@ -629,6 +672,9 @@ export default function PayPeriodsPage({
               onUnmoveBill(billId, fromPeriodStart, p.startDate)
             }
             onBankUnlinked={onBankUnlinked}
+            onCreditCardPaymentProcessed={(cardId, amountCents) =>
+              onCreditCardPaymentProcessed(p.startDate, cardId, amountCents)
+            }
           />
         ))}
       </div>

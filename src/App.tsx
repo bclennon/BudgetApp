@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { Bill, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
+import type { Bill, CreditCard, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
 import {
   loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
   loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
   loadPeriodOverrides, savePeriodOverrides,
   loadPeriodOverridesFromCloud, savePeriodOverridesToCloud,
+  loadCreditCards, saveCreditCards,
+  loadCreditCardsFromCloud, saveCreditCardsToCloud,
 } from './data/storage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import SignInPage from './pages/SignInPage';
@@ -13,12 +15,14 @@ import PayPeriodsPage from './pages/PayPeriodsPage';
 import BillsPage from './pages/BillsPage';
 import SettingsPage from './pages/SettingsPage';
 import BackupSyncPage from './pages/BackupSyncPage';
+import CreditCardsPage from './pages/CreditCardsPage';
 
-type Tab = 'periods' | 'bills' | 'settings' | 'backup';
+type Tab = 'periods' | 'bills' | 'creditcards' | 'settings' | 'backup';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'periods', label: 'Pay Periods', icon: '📅' },
   { id: 'bills', label: 'Bills', icon: '🧾' },
+  { id: 'creditcards', label: 'Credit Cards', icon: '💳' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
   { id: 'backup', label: 'Backup', icon: '💾' },
 ];
@@ -32,6 +36,7 @@ function AppShell() {
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
   const [periodOverrides, setPeriodOverrides] = useState<PeriodOverrides>(() => loadPeriodOverrides());
+  const [creditCards, setCreditCards] = useState<CreditCard[]>(() => loadCreditCards());
   const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
   const [cloudLoaded, setCloudLoaded] = useState(false);
 
@@ -44,10 +49,11 @@ function AppShell() {
     let cancelled = false;
     const uid = user.uid;
     async function syncFromCloud() {
-      const [cloudBills, cloudSettings, cloudOverrides] = await Promise.all([
+      const [cloudBills, cloudSettings, cloudOverrides, cloudCreditCards] = await Promise.all([
         loadBillsFromCloud(uid),
         loadSettingsFromCloud(uid),
         loadPeriodOverridesFromCloud(uid),
+        loadCreditCardsFromCloud(uid),
       ]);
       if (cancelled) return;
       if (cloudBills !== null) {
@@ -61,6 +67,10 @@ function AppShell() {
       if (cloudOverrides !== null) {
         setPeriodOverrides(cloudOverrides);
         savePeriodOverrides(cloudOverrides);
+      }
+      if (cloudCreditCards !== null) {
+        setCreditCards(cloudCreditCards);
+        saveCreditCards(cloudCreditCards);
       }
       setCloudLoaded(true);
     }
@@ -93,6 +103,40 @@ function AppShell() {
     setSettings(s);
     saveSettings(s);
     if (user) saveSettingsToCloud(user.uid, s);
+  }
+
+  function addCreditCard(name: string, balanceCents: number, transferExpirationDate: string | undefined) {
+    const newCard: CreditCard = {
+      id: crypto.randomUUID(),
+      name,
+      balanceCents,
+      transferExpirationDate,
+    };
+    const updated = [...creditCards, newCard];
+    setCreditCards(updated);
+    saveCreditCards(updated);
+    if (user) saveCreditCardsToCloud(user.uid, updated);
+  }
+
+  function updateCreditCard(card: CreditCard) {
+    const updated = creditCards.map((c) => (c.id === card.id ? card : c));
+    setCreditCards(updated);
+    saveCreditCards(updated);
+    if (user) saveCreditCardsToCloud(user.uid, updated);
+  }
+
+  function deleteCreditCard(id: string) {
+    const updated = creditCards.filter((c) => c.id !== id);
+    setCreditCards(updated);
+    saveCreditCards(updated);
+    if (user) saveCreditCardsToCloud(user.uid, updated);
+  }
+
+  function handleCreditCardPaymentProcessed(_periodStart: string, cardId: string, amountCents: number) {
+    const card = creditCards.find((c) => c.id === cardId);
+    if (!card) return;
+    const newBalance = Math.max(0, card.balanceCents - amountCents);
+    updateCreditCard({ ...card, balanceCents: newBalance });
   }
 
   function handleBankLinked() {
@@ -227,16 +271,26 @@ function AppShell() {
             settings={settings}
             overrides={periodOverrides}
             bankLinked={settings?.bankLinked ?? false}
+            creditCards={creditCards}
             onUpdatePeriodOverride={updatePeriodOverride}
             onMoveBill={moveBill}
             onUnmoveBill={unmoveBill}
             onUndo={undo}
             canUndo={undoHistory.length > 0}
             onBankUnlinked={handleBankUnlinked}
+            onCreditCardPaymentProcessed={handleCreditCardPaymentProcessed}
           />
         )}
         {tab === 'bills' && (
           <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} onImportBills={importBills} />
+        )}
+        {tab === 'creditcards' && (
+          <CreditCardsPage
+            cards={creditCards}
+            onAdd={addCreditCard}
+            onUpdate={updateCreditCard}
+            onDelete={deleteCreditCard}
+          />
         )}
         {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onBankLinked={handleBankLinked} />}
         {tab === 'backup' && (

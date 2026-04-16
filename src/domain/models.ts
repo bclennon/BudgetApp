@@ -2,6 +2,13 @@ export type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'SEMI_MONTHLY' | 'MONTHLY';
 
 export type BillPaymentStatus = 'submitted' | 'processed';
 
+export interface CreditCard {
+  id: string;
+  name: string;
+  balanceCents: number;
+  transferExpirationDate?: string; // "YYYY-MM-DD", optional balance-transfer expiry
+}
+
 export interface Bill {
   id: number;
   name: string;
@@ -33,6 +40,8 @@ export interface PayPeriodOverride {
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
   /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
   billPaymentStatuses: Record<string, BillPaymentStatus>;
+  /** Tracks the payment status of the credit-card debt payment for this period. */
+  creditCardPaymentStatus?: BillPaymentStatus;
 }
 
 /** Map of period startDate → override. */
@@ -41,6 +50,20 @@ export type PeriodOverrides = Record<string, PayPeriodOverride>;
 /** Returns a blank PayPeriodOverride (no changes). */
 export function emptyOverride(): PayPeriodOverride {
   return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} };
+}
+
+/** Returns the credit card that should be paid first (earliest expiration date, then no-date cards). */
+export function getPriorityCard(cards: CreditCard[]): CreditCard | null {
+  const withBalance = cards.filter((c) => c.balanceCents > 0);
+  if (withBalance.length === 0) return null;
+  return withBalance.slice().sort((a, b) => {
+    if (a.transferExpirationDate && b.transferExpirationDate) {
+      return a.transferExpirationDate.localeCompare(b.transferExpirationDate);
+    }
+    if (a.transferExpirationDate) return -1;
+    if (b.transferExpirationDate) return 1;
+    return a.name.localeCompare(b.name);
+  })[0];
 }
 
 export interface BillInPeriod {
