@@ -57,7 +57,7 @@ async function sophtronPost<T>(path: string, body: object): Promise<T> {
  * session. The client uses these to initialise the Sophtron widget.
  * Returns `{ integrationKey: string, requestId: string }`.
  */
-export const getSophtronWidgetData = onCall({ cors: ['https://bclennon.github.io'] }, async (request) => {
+export const getSophtronWidgetData = onCall({ cors: ['https://bclennon.github.io'], secrets: ['SOPHTRON_USER_ID', 'SOPHTRON_ACCESS_KEY'] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'You must be signed in.');
   }
@@ -114,7 +114,7 @@ interface SophtronAccount {
  * Fetches the current balance of the linked checking account via Sophtron.
  * Returns `{ balanceCents: number }`.
  */
-export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'] }, async (request) => {
+export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'], secrets: ['SOPHTRON_USER_ID', 'SOPHTRON_ACCESS_KEY'] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'You must be signed in.');
   }
