@@ -42,6 +42,10 @@ export interface PayPeriodOverride {
   billPaymentStatuses: Record<string, BillPaymentStatus>;
   /** Tracks the payment status of the credit-card debt payment for this period. */
   creditCardPaymentStatus?: BillPaymentStatus;
+  /** Amount (cents) that was applied to the credit card when marked as processed. */
+  creditCardPaymentAmountCents?: number;
+  /** ID of the credit card that received the payment. */
+  creditCardPaymentCardId?: string;
 }
 
 /** Map of period startDate → override. */
