@@ -313,6 +313,143 @@
   font-size: 0.85rem;
 }
 
+/* ── Pay Period interactive elements ──────────────────────────────────────── */
+
+.page-header .page-title { margin-bottom: 0; }
+
+.btn-undo {
+  padding: 7px 14px;
+  font-size: 0.85rem;
+}
+.btn-undo:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Tiny inline buttons that sit next to text in table cells */
+.btn-xs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  margin-left: 4px;
+  line-height: 1.4;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.btn-xs:hover { background: var(--gray-100); }
+
+.btn-primary-xs {
+  background: var(--blue);
+  color: var(--white);
+  border-color: var(--blue);
+}
+.btn-primary-xs:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+
+.btn-danger-xs { color: var(--red); }
+.btn-danger-xs:hover { background: var(--red-light); border-color: var(--red); }
+
+/* Inline button placed next to cell text (no extra visual weight) */
+.btn-inline {
+  border-color: transparent;
+  padding: 1px 4px;
+  font-size: 0.8rem;
+}
+.btn-inline:hover { background: var(--gray-100); border-color: var(--gray-200); }
+
+/* Inline form (row inside a table, spans both columns) */
+.period-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 4px;
+}
+
+.period-inline-form--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.inline-label {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  white-space: nowrap;
+}
+
+.inline-error {
+  font-size: 0.8rem;
+  color: var(--red);
+  width: 100%;
+}
+
+.inline-input {
+  padding: 5px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  background: var(--white);
+  color: var(--gray-900);
+  min-width: 80px;
+  width: auto;
+}
+.inline-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,.15);
+}
+.inline-input--flex { flex: 1; min-width: 100px; }
+.inline-input--amount { width: 90px; }
+.inline-input--date  { width: 130px; }
+
+.inline-select {
+  padding: 5px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  background: var(--white);
+  color: var(--gray-900);
+  max-width: 260px;
+  flex: 1;
+}
+.inline-select:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,.15);
+}
+
+/* Rows for editing/moving/adding that span both columns */
+.row-paycheck-edit td,
+.row-move-selector td,
+.row-add-one-time td,
+.row-add-one-time-form td {
+  padding: 2px 0 4px;
+}
+
+/* Add-one-time-bill button row */
+.btn-add-one-time {
+  color: var(--blue);
+  border-color: transparent;
+  background: transparent;
+  font-size: 0.82rem;
+  padding: 3px 0;
+}
+.btn-add-one-time:hover { background: var(--blue-light); border-color: var(--blue); }
+
+/* Tags on bill rows */
+.override-tag  { font-size: 0.75rem; color: var(--blue);  font-style: italic; margin-left: 4px; }
+.moved-tag     { font-size: 0.75rem; color: var(--gray-400); margin-left: 4px; }
+.one-time-tag  { font-size: 0.75rem; color: var(--green); margin-left: 4px; }
+
+/* Moved-in bill row: slightly muted */
+.row-moved td { color: var(--gray-500); }
+
+/* One-time bill row: slightly highlighted */
+.row-one-time td { color: var(--gray-700); font-style: italic; }
+
 @media (min-width: 640px) {
   .tab-btn { font-size: 0.8rem; padding: 12px 8px; }
   .tab-icon { font-size: 1.3rem; }

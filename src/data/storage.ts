@@ -1,9 +1,10 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Bill, PaySettings } from '../domain/models';
+import type { Bill, PaySettings, PeriodOverrides } from '../domain/models';
 
 const KEY_BILLS = 'budgetapp_bills';
 const KEY_SETTINGS = 'budgetapp_settings';
+const KEY_PERIOD_OVERRIDES = 'budgetapp_period_overrides';
 
 // ── localStorage (local cache) ───────────────────────────────────────────────
 
@@ -31,6 +32,19 @@ export function loadSettings(): PaySettings | null {
 
 export function saveSettings(settings: PaySettings): void {
   localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
+}
+
+export function loadPeriodOverrides(): PeriodOverrides {
+  try {
+    const raw = localStorage.getItem(KEY_PERIOD_OVERRIDES);
+    return raw ? (JSON.parse(raw) as PeriodOverrides) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function savePeriodOverrides(overrides: PeriodOverrides): void {
+  localStorage.setItem(KEY_PERIOD_OVERRIDES, JSON.stringify(overrides));
 }
 
 export function getNextBillId(bills: Bill[]): number {
@@ -72,6 +86,24 @@ export async function saveSettingsToCloud(uid: string, settings: PaySettings): P
     await setDoc(doc(db, 'users', uid, 'data', 'settings'), { settings });
   } catch (err) {
     console.error('Failed to save settings to cloud:', err);
+  }
+}
+
+export async function loadPeriodOverridesFromCloud(uid: string): Promise<PeriodOverrides | null> {
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'data', 'periodOverrides'));
+    if (!snap.exists()) return null;
+    return (snap.data().overrides ?? {}) as PeriodOverrides;
+  } catch {
+    return null;
+  }
+}
+
+export async function savePeriodOverridesToCloud(uid: string, overrides: PeriodOverrides): Promise<void> {
+  try {
+    await setDoc(doc(db, 'users', uid, 'data', 'periodOverrides'), { overrides });
+  } catch (err) {
+    console.error('Failed to save period overrides to cloud:', err);
   }
 }
 
