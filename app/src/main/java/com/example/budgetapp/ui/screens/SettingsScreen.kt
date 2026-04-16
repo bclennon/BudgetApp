@@ -102,7 +102,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 val target = targetSpending.toDoubleOrNull()
                 val payday = try { LocalDate.parse(nextPayday) } catch (e: Exception) { null }
                 when {
-                    paycheck == null || paycheck < 0 -> statusMessage = "Invalid paycheck amount"
+                    paycheck == null || paycheck < 0 -> statusMessage = "Paycheck amount must be a positive number"
                     payday == null -> statusMessage = "Invalid date (use YYYY-MM-DD)"
                     target == null || target < 0 -> statusMessage = "Invalid target spending"
                     else -> {

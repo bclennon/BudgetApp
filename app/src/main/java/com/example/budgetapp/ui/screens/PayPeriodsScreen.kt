@@ -95,7 +95,7 @@ fun PayPeriodCard(period: PayPeriod, formatter: DateTimeFormatter) {
 
 fun formatCents(cents: Long): String {
     val negative = cents < 0
-    val abs = Math.abs(cents)
+    val abs = kotlin.math.abs(cents)
     val dollars = abs / 100
     val centsRemainder = abs % 100
     val formatted = "\$${dollars}.${centsRemainder.toString().padStart(2, '0')}"

@@ -152,7 +152,7 @@ fun BillDialog(
                 val a = amount.toDoubleOrNull()
                 when {
                     name.isBlank() -> error = "Name required"
-                    d == null || d < 1 || d > 31 -> error = "Day must be 1-31"
+                    d == null || d < 1 || d > 31 -> error = "Day must be a number between 1 and 31"
                     a == null || a < 0 -> error = "Invalid amount"
                     else -> onConfirm(name.trim(), d, (a * 100).toLong())
                 }

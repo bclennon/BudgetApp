@@ -84,7 +84,7 @@ class BackupSyncViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 val backup = backupManager.readBackup(Uri.parse(uriString))
                 val billDao = db.billDao()
-                billDao.getAllBills().first().forEach { billDao.deleteBill(it) }
+                billDao.deleteAllBills()
                 backup.bills.forEach {
                     billDao.insertBill(BillEntity(name = it.name, dayOfMonth = it.dayOfMonth, amountCents = it.amountCents))
                 }
