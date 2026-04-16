@@ -118,7 +118,7 @@ export default function SettingsPage({ settings, onSave, onBankLinked }: Props) 
   // ── Sophtron Link ──────────────────────────────────────────────────────────
 
   async function handleSophtronSuccess(data: SophtronFinishData) {
-    const userInstitutionId = data.UserInstitutionID ?? data.userInstitutionId;
+    const userInstitutionId = data.userInstitutionId;
     if (!userInstitutionId) {
       setBankError('Bank linked but account ID was not returned. Please try again.');
       return;
