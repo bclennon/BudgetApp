@@ -26,7 +26,7 @@ interface SophtronFinishData {
   _type: string;
   Step?: string;  // PascalCase from Sophtron API (e.g. 'LoginSuccess', 'LoginFailure')
   step?: string;  // lowercase fallback used by some widget versions
-  userInstitutionID?: string;
+  userInstitutionId?: string;
   [key: string]: unknown;
 }
 
