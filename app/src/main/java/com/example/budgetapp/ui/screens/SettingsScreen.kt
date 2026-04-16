@@ -1,5 +1,6 @@
 package com.example.budgetapp.ui.screens
 
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -61,7 +62,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = frequencyExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
             )
             ExposedDropdownMenu(
                 expanded = frequencyExpanded,
