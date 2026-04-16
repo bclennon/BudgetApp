@@ -229,6 +229,14 @@ function paymentStatusTitle(status: BillPaymentStatus | undefined): string {
   return 'Mark as payment submitted';
 }
 
+function paymentStatusClassName(status: BillPaymentStatus | undefined): string {
+  return `btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`;
+}
+
+function billKey(billId: number): string {
+  return String(billId);
+}
+
 // ── Period card ────────────────────────────────────────────────────────────
 
 interface PeriodCardProps {
@@ -335,8 +343,8 @@ function PeriodCard({
 
           {/* ── Regular recurring bills ── */}
           {regularBills.map(({ bill, dueDate }) => {
-            const billKey = String(bill.id);
-            const status = (override.billPaymentStatuses ?? {})[billKey];
+            const key = billKey(bill.id);
+            const status = (override.billPaymentStatuses ?? {})[key];
             return (
               <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : ''}`}>
                 <td>
@@ -346,8 +354,8 @@ function PeriodCard({
                 <td className="amount neg">
                   -{formatCents(bill.amountCents)}
                   <button
-                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
-                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    className={paymentStatusClassName(status)}
+                    onClick={() => handleTogglePaymentStatus(key)}
                     aria-label={paymentStatusTitle(status)}
                     title={paymentStatusTitle(status)}
                   >
@@ -381,8 +389,8 @@ function PeriodCard({
 
           {/* ── Bills moved in from other periods ── */}
           {movedInBills.map(({ bill, dueDate, movedFromPeriod }, idx) => {
-            const billKey = String(bill.id);
-            const status = (override.billPaymentStatuses ?? {})[billKey];
+            const key = billKey(bill.id);
+            const status = (override.billPaymentStatuses ?? {})[key];
             return (
               <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : ''}`}>
                 <td>
@@ -393,8 +401,8 @@ function PeriodCard({
                 <td className="amount neg">
                   -{formatCents(bill.amountCents)}
                   <button
-                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
-                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    className={paymentStatusClassName(status)}
+                    onClick={() => handleTogglePaymentStatus(key)}
                     aria-label={paymentStatusTitle(status)}
                     title={paymentStatusTitle(status)}
                   >
@@ -415,8 +423,8 @@ function PeriodCard({
 
           {/* ── One-time bills ── */}
           {oneTimeBills.map(({ bill, dueDate, oneTimeBillId }) => {
-            const billKey = oneTimeBillId!;
-            const status = (override.billPaymentStatuses ?? {})[billKey];
+            const key = oneTimeBillId!;
+            const status = (override.billPaymentStatuses ?? {})[key];
             return (
               <tr key={`ot-${oneTimeBillId}`} className={`row-bill row-one-time${status === 'processed' ? ' row-bill-processed' : ''}`}>
                 <td>
@@ -427,8 +435,8 @@ function PeriodCard({
                 <td className="amount neg">
                   -{formatCents(bill.amountCents)}
                   <button
-                    className={`btn-xs btn-inline btn-payment-status${status ? ` btn-payment-${status}` : ''}`}
-                    onClick={() => handleTogglePaymentStatus(billKey)}
+                    className={paymentStatusClassName(status)}
+                    onClick={() => handleTogglePaymentStatus(key)}
                     aria-label={paymentStatusTitle(status)}
                     title={paymentStatusTitle(status)}
                   >
