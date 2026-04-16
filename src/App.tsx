@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Bill, CreditCard, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
+import type { Bill, CreditCard, CreditCardPayment, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
 import { generatePayPeriods } from './domain/payPeriodGenerator';
 import {
@@ -133,17 +133,26 @@ function AppShell() {
     if (user) saveCreditCardsToCloud(user.uid, updated);
   }
 
-  function handleCreditCardPaymentProcessed(_periodStart: string, cardId: string, amountCents: number) {
-    const card = creditCards.find((c) => c.id === cardId);
-    if (!card) return;
-    const newBalance = Math.max(0, card.balanceCents - amountCents);
-    updateCreditCard({ ...card, balanceCents: newBalance });
+  function handleCreditCardPaymentProcessed(_periodStart: string, payments: CreditCardPayment[]) {
+    const updated = creditCards.map((c) => {
+      const payment = payments.find((p) => p.cardId === c.id);
+      if (!payment) return c;
+      return { ...c, balanceCents: Math.max(0, c.balanceCents - payment.amountCents) };
+    });
+    setCreditCards(updated);
+    saveCreditCards(updated);
+    if (user) saveCreditCardsToCloud(user.uid, updated);
   }
 
-  function handleCreditCardPaymentRestored(_periodStart: string, cardId: string, amountCents: number) {
-    const card = creditCards.find((c) => c.id === cardId);
-    if (!card) return;
-    updateCreditCard({ ...card, balanceCents: card.balanceCents + amountCents });
+  function handleCreditCardPaymentRestored(_periodStart: string, payments: CreditCardPayment[]) {
+    const updated = creditCards.map((c) => {
+      const payment = payments.find((p) => p.cardId === c.id);
+      if (!payment) return c;
+      return { ...c, balanceCents: c.balanceCents + payment.amountCents };
+    });
+    setCreditCards(updated);
+    saveCreditCards(updated);
+    if (user) saveCreditCardsToCloud(user.uid, updated);
   }
 
   function handleBankLinked(balanceCents?: number) {
@@ -200,6 +209,7 @@ function AppShell() {
     // Firestore, which rejects undefined values) doesn't receive undefined.
     if (merged.paycheckAmountCents === undefined) delete merged.paycheckAmountCents;
     if (merged.creditCardPaymentStatus === undefined) delete merged.creditCardPaymentStatus;
+    if (merged.creditCardPayments === undefined) delete merged.creditCardPayments;
     if (merged.creditCardPaymentAmountCents === undefined) delete merged.creditCardPaymentAmountCents;
     if (merged.creditCardPaymentCardId === undefined) delete merged.creditCardPaymentCardId;
     applyOverrides({ ...periodOverrides, [periodStart]: merged });

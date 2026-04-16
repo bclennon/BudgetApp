@@ -32,6 +32,12 @@ export interface OneTimeBill {
   dueDate: string; // "YYYY-MM-DD"
 }
 
+/** A single credit-card payment recorded for a pay period. */
+export interface CreditCardPayment {
+  cardId: string;
+  amountCents: number;
+}
+
 /** Per-pay-period user overrides. */
 export interface PayPeriodOverride {
   paycheckAmountCents?: number; // override the default paycheck for this period
@@ -40,11 +46,16 @@ export interface PayPeriodOverride {
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
   /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
   billPaymentStatuses: Record<string, BillPaymentStatus>;
-  /** Tracks the payment status of the credit-card debt payment for this period. */
+  /** Tracks the payment status of the credit-card debt payment(s) for this period. */
   creditCardPaymentStatus?: BillPaymentStatus;
-  /** Amount (cents) that was applied to the credit card when marked as processed. */
+  /**
+   * Payments to one or more credit cards for this period (set when processed).
+   * Supersedes the legacy single-card fields below.
+   */
+  creditCardPayments?: CreditCardPayment[];
+  /** @deprecated Use creditCardPayments instead. Kept for backward compatibility. */
   creditCardPaymentAmountCents?: number;
-  /** ID of the credit card that received the payment. */
+  /** @deprecated Use creditCardPayments instead. Kept for backward compatibility. */
   creditCardPaymentCardId?: string;
 }
 
@@ -56,18 +67,44 @@ export function emptyOverride(): PayPeriodOverride {
   return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} };
 }
 
+function sortedCardsWithBalance(cards: CreditCard[]): CreditCard[] {
+  return cards
+    .filter((c) => c.balanceCents > 0)
+    .slice()
+    .sort((a, b) => {
+      if (a.transferExpirationDate && b.transferExpirationDate) {
+        return a.transferExpirationDate.localeCompare(b.transferExpirationDate);
+      }
+      if (a.transferExpirationDate) return -1;
+      if (b.transferExpirationDate) return 1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
 /** Returns the credit card that should be paid first (earliest expiration date, then no-date cards). */
 export function getPriorityCard(cards: CreditCard[]): CreditCard | null {
-  const withBalance = cards.filter((c) => c.balanceCents > 0);
-  if (withBalance.length === 0) return null;
-  return withBalance.slice().sort((a, b) => {
-    if (a.transferExpirationDate && b.transferExpirationDate) {
-      return a.transferExpirationDate.localeCompare(b.transferExpirationDate);
-    }
-    if (a.transferExpirationDate) return -1;
-    if (b.transferExpirationDate) return 1;
-    return a.name.localeCompare(b.name);
-  })[0];
+  const sorted = sortedCardsWithBalance(cards);
+  return sorted.length > 0 ? sorted[0] : null;
+}
+
+/**
+ * Allocates availableCents across credit cards in priority order.
+ * If availableCents exceeds the first card's balance, the remainder cascades
+ * to the next card(s) in line.
+ */
+export function getPlannedCardPayments(
+  availableCents: number,
+  cards: CreditCard[],
+): Array<{ card: CreditCard; amountCents: number }> {
+  const result: Array<{ card: CreditCard; amountCents: number }> = [];
+  let remaining = availableCents;
+  for (const card of sortedCardsWithBalance(cards)) {
+    if (remaining <= 0) break;
+    const amount = Math.min(remaining, card.balanceCents);
+    result.push({ card, amountCents: amount });
+    remaining -= amount;
+  }
+  return result;
 }
 
 export interface BillInPeriod {
