@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Web App
 
 on:
   push:
@@ -17,21 +17,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Run tests
+        run: npm test
 
-      - name: Upload APK artifact
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: budgetapp-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: budgetapp-dist
+          path: dist/
