@@ -43,6 +43,15 @@ export default function App() {
     saveSettings(s);
   }
 
+  function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
+    const updated = [...bills];
+    for (const item of items) {
+      updated.push({ id: getNextBillId(updated), ...item });
+    }
+    setBills(updated);
+    saveBills(updated);
+  }
+
   function importData(newBills: Bill[], newSettings: PaySettings | null) {
     setBills(newBills);
     saveBills(newBills);
@@ -70,7 +79,7 @@ export default function App() {
       <main className="content">
         {tab === 'periods' && <PayPeriodsPage bills={bills} settings={settings} />}
         {tab === 'bills' && (
-          <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} />
+          <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} onImportBills={importBills} />
         )}
         {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} />}
         {tab === 'backup' && (
