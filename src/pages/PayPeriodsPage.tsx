@@ -354,9 +354,9 @@ function PeriodCard({
   // Once a CC payment is processed, stop deducting it from Remaining —
   // same behaviour as marking a regular bill as processed.
   const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : ccPaymentCents);
-  const effectiveSpendingPerDay = period.hasSurplus
-    ? period.displayedSpendingPerDay
-    : (period.daysInPeriod > 0 ? Math.trunc(effectiveRemainingCents / period.daysInPeriod) : 0);
+  const effectiveSpendingPerDay = period.daysInPeriod > 0
+    ? Math.trunc(effectiveRemainingCents / period.daysInPeriod)
+    : 0;
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
