@@ -27,7 +27,7 @@ function getPlaidClient() {
  * Creates a Plaid Link token scoped to the `balance` product.
  * Returns `{ linkToken: string }`.
  */
-exports.createLinkToken = (0, https_1.onCall)(async (request) => {
+exports.createLinkToken = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'You must be signed in.');
     }
@@ -46,7 +46,7 @@ exports.createLinkToken = (0, https_1.onCall)(async (request) => {
  * in Firestore at `users/{uid}/plaid/token`.
  * Accepts `{ publicToken: string }`.
  */
-exports.exchangePublicToken = (0, https_1.onCall)(async (request) => {
+exports.exchangePublicToken = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'You must be signed in.');
     }
@@ -68,7 +68,7 @@ exports.exchangePublicToken = (0, https_1.onCall)(async (request) => {
  * Fetches the current balance of the linked Wells Fargo Checking account.
  * Returns `{ balanceCents: number }`.
  */
-exports.getCheckingBalance = (0, https_1.onCall)(async (request) => {
+exports.getCheckingBalance = (0, https_1.onCall)({ cors: ['https://bclennon.github.io'] }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'You must be signed in.');
     }
