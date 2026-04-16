@@ -1,4 +1,4 @@
-import type { Bill, BillInPeriod, Frequency, PayPeriod, PaySettings } from './models';
+import type { Bill, BillInPeriod, Frequency, PayPeriod, PaySettings, PeriodOverrides } from './models';
 import { resolveDueDate } from './billDueDateResolver';
 
 function parseDate(dateStr: string): { year: number; month: number; day: number } {
@@ -51,7 +51,12 @@ export function nextPayday(current: string, frequency: Frequency): string {
   }
 }
 
-export function generatePayPeriods(settings: PaySettings, bills: Bill[], count = 6): PayPeriod[] {
+export function generatePayPeriods(
+  settings: PaySettings,
+  bills: Bill[],
+  count = 24,
+  overrides: PeriodOverrides = {},
+): PayPeriod[] {
   const periods: PayPeriod[] = [];
   let currentStart = settings.nextPayday;
 
@@ -59,6 +64,10 @@ export function generatePayPeriods(settings: PaySettings, bills: Bill[], count =
     const nextPay = nextPayday(currentStart, settings.frequency);
     const currentEnd = addDays(nextPay, -1);
     const daysInPeriod = daysBetween(currentStart, currentEnd) + 1;
+
+    const override = overrides[currentStart];
+    const effectivePaycheckCents = override?.paycheckAmountCents ?? settings.paycheckAmountCents;
+    const movedOutIds = new Set(override?.movedOutBillIds ?? []);
 
     const startParts = parseDate(currentStart);
     const endParts = parseDate(currentEnd);
@@ -70,7 +79,10 @@ export function generatePayPeriods(settings: PaySettings, bills: Bill[], count =
     }
 
     const billsInPeriod: BillInPeriod[] = [];
+
+    // Recurring bills (skip those moved out of this period)
     for (const bill of bills) {
+      if (movedOutIds.has(bill.id)) continue;
       for (const { year, month } of monthsToCheck) {
         const dueDate = resolveDueDate(year, month, bill.dayOfMonth);
         if (dueDate >= currentStart && dueDate <= currentEnd) {
@@ -80,8 +92,34 @@ export function generatePayPeriods(settings: PaySettings, bills: Bill[], count =
       }
     }
 
+    // Bills moved into this period from another period
+    const billMap = new Map(bills.map((b) => [b.id, b]));
+    for (const moved of override?.movedInBills ?? []) {
+      const bill = billMap.get(moved.billId);
+      if (bill) {
+        billsInPeriod.push({
+          bill,
+          dueDate: moved.dueDate,
+          movedFromPeriod: moved.fromPeriodStart,
+        });
+      }
+    }
+
+    // One-time bills manually added to this period
+    for (const ot of override?.oneTimeBills ?? []) {
+      billsInPeriod.push({
+        bill: { id: 0, name: ot.name, amountCents: ot.amountCents, dayOfMonth: 0 },
+        dueDate: ot.dueDate,
+        isOneTime: true,
+        oneTimeBillId: ot.id,
+      });
+    }
+
+    // Sort by due date
+    billsInPeriod.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+
     const billsTotalCents = billsInPeriod.reduce((sum, b) => sum + b.bill.amountCents, 0);
-    const remainingCents = settings.paycheckAmountCents - billsTotalCents;
+    const remainingCents = effectivePaycheckCents - billsTotalCents;
     const spendingPerDayRaw = daysInPeriod > 0 ? Math.trunc(remainingCents / daysInPeriod) : 0;
     const hasSavings = spendingPerDayRaw > settings.targetSpendingPerDayCents;
     const savingsTotalCents = hasSavings
@@ -95,7 +133,7 @@ export function generatePayPeriods(settings: PaySettings, bills: Bill[], count =
       startDate: currentStart,
       endDate: currentEnd,
       bills: billsInPeriod,
-      paycheckAmountCents: settings.paycheckAmountCents,
+      paycheckAmountCents: effectivePaycheckCents,
       billsTotalCents,
       remainingCents,
       daysInPeriod,

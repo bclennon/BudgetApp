@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import type { Bill, PaySettings } from './domain/models';
+import type { Bill, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
+import { emptyOverride } from './domain/models';
 import {
   loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
   loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
+  loadPeriodOverrides, savePeriodOverrides,
+  loadPeriodOverridesFromCloud, savePeriodOverridesToCloud,
 } from './data/storage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import SignInPage from './pages/SignInPage';
@@ -20,11 +23,16 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'backup', label: 'Backup', icon: '💾' },
 ];
 
+// Maximum number of undo steps kept in memory per session.
+const MAX_UNDO = 50;
+
 function AppShell() {
   const { user, loading, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('periods');
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
+  const [periodOverrides, setPeriodOverrides] = useState<PeriodOverrides>(() => loadPeriodOverrides());
+  const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
   const [cloudLoaded, setCloudLoaded] = useState(false);
 
   // Load from Firestore when the user signs in.
@@ -36,9 +44,10 @@ function AppShell() {
     let cancelled = false;
     const uid = user.uid;
     async function syncFromCloud() {
-      const [cloudBills, cloudSettings] = await Promise.all([
+      const [cloudBills, cloudSettings, cloudOverrides] = await Promise.all([
         loadBillsFromCloud(uid),
         loadSettingsFromCloud(uid),
+        loadPeriodOverridesFromCloud(uid),
       ]);
       if (cancelled) return;
       if (cloudBills !== null) {
@@ -48,6 +57,10 @@ function AppShell() {
       if (cloudSettings !== null) {
         setSettings(cloudSettings);
         saveSettings(cloudSettings);
+      }
+      if (cloudOverrides !== null) {
+        setPeriodOverrides(cloudOverrides);
+        savePeriodOverrides(cloudOverrides);
       }
       setCloudLoaded(true);
     }
@@ -103,6 +116,65 @@ function AppShell() {
     }
   }
 
+  /** Snapshot current overrides to undo history, then apply newOverrides. */
+  function applyOverrides(newOverrides: PeriodOverrides) {
+    setUndoHistory((prev) => [...prev.slice(-(MAX_UNDO - 1)), periodOverrides]);
+    setPeriodOverrides(newOverrides);
+    savePeriodOverrides(newOverrides);
+    if (user) savePeriodOverridesToCloud(user.uid, newOverrides);
+  }
+
+  function updatePeriodOverride(periodStart: string, patch: Partial<PayPeriodOverride>) {
+    const prev = periodOverrides[periodStart] ?? emptyOverride();
+    applyOverrides({ ...periodOverrides, [periodStart]: { ...prev, ...patch } });
+  }
+
+  function moveBill(billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) {
+    const fromPrev = periodOverrides[fromPeriodStart] ?? emptyOverride();
+    const toPrev = periodOverrides[toPeriodStart] ?? emptyOverride();
+    const newOverrides = {
+      ...periodOverrides,
+      [fromPeriodStart]: {
+        ...fromPrev,
+        movedOutBillIds: [...fromPrev.movedOutBillIds, billId],
+      },
+      [toPeriodStart]: {
+        ...toPrev,
+        movedInBills: [...toPrev.movedInBills, { billId, fromPeriodStart, dueDate: toDueDate }],
+      },
+    };
+    applyOverrides(newOverrides);
+  }
+
+  function unmoveBill(billId: number, fromPeriodStart: string, toPeriodStart: string) {
+    const fromPrev = periodOverrides[fromPeriodStart] ?? emptyOverride();
+    const toPrev = periodOverrides[toPeriodStart] ?? emptyOverride();
+    const newOverrides = {
+      ...periodOverrides,
+      [fromPeriodStart]: {
+        ...fromPrev,
+        movedOutBillIds: fromPrev.movedOutBillIds.filter((id) => id !== billId),
+      },
+      [toPeriodStart]: {
+        ...toPrev,
+        movedInBills: toPrev.movedInBills.filter((m) => !(m.billId === billId && m.fromPeriodStart === fromPeriodStart)),
+      },
+    };
+    applyOverrides(newOverrides);
+  }
+
+  function undo() {
+    setUndoHistory((prev) => {
+      if (prev.length === 0) return prev;
+      const previous = prev[prev.length - 1];
+      const newHistory = prev.slice(0, -1);
+      setPeriodOverrides(previous);
+      savePeriodOverrides(previous);
+      if (user) savePeriodOverridesToCloud(user.uid, previous);
+      return newHistory;
+    });
+  }
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -139,7 +211,18 @@ function AppShell() {
       )}
 
       <main className="content">
-        {tab === 'periods' && <PayPeriodsPage bills={bills} settings={settings} />}
+        {tab === 'periods' && (
+          <PayPeriodsPage
+            bills={bills}
+            settings={settings}
+            overrides={periodOverrides}
+            onUpdatePeriodOverride={updatePeriodOverride}
+            onMoveBill={moveBill}
+            onUnmoveBill={unmoveBill}
+            onUndo={undo}
+            canUndo={undoHistory.length > 0}
+          />
+        )}
         {tab === 'bills' && (
           <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} onImportBills={importBills} />
         )}
