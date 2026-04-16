@@ -1,6 +1,12 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Plaid access tokens must never be readable or writable from the client.
+    // They are written and read exclusively by Cloud Functions via the Admin SDK.
+    match /users/{userId}/plaid/{document=**} {
+      allow read, write: if false;
+    }
+
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
