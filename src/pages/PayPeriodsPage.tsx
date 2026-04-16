@@ -332,19 +332,20 @@ function PeriodCard({
     onUpdateOverride({ billPaymentStatuses: updated });
   }
 
+  const priorityCard = getPriorityCard(creditCards);
+  const ccPaymentCents = priorityCard
+    ? Math.min(period.savingsTotalCents, priorityCard.balanceCents)
+    : 0;
+  const savingsRemainderCents = period.savingsTotalCents - ccPaymentCents;
+
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
     const next = nextPaymentStatus(current);
-    if (next === 'processed') {
-      const priorityCard = getPriorityCard(creditCards);
-      if (priorityCard) {
-        onCreditCardPaymentProcessed(priorityCard.id, period.savingsTotalCents);
-      }
+    if (next === 'processed' && priorityCard) {
+      onCreditCardPaymentProcessed(priorityCard.id, ccPaymentCents);
     }
     onUpdateOverride({ creditCardPaymentStatus: next });
   }
-
-  const priorityCard = getPriorityCard(creditCards);
 
   // Separate bill types for rendering
   const regularBills = period.bills.filter((b) => !b.isOneTime && !b.movedFromPeriod);
@@ -545,25 +546,33 @@ function PeriodCard({
 
           {/* ── Credit card payment or Savings ── */}
           {period.hasSavings && priorityCard ? (
-            <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
-              <td>
-                → {priorityCard.name}
-                {priorityCard.transferExpirationDate && (
-                  <span className="due-date"> (exp. {priorityCard.transferExpirationDate})</span>
-                )}
-              </td>
-              <td className="amount pos">
-                +{formatCents(period.savingsTotalCents)}
-                <button
-                  className={paymentStatusClassName(override.creditCardPaymentStatus)}
-                  onClick={handleToggleCreditCardPaymentStatus}
-                  aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
-                  title={paymentStatusTitle(override.creditCardPaymentStatus)}
-                >
-                  {paymentStatusIcon(override.creditCardPaymentStatus)}
-                </button>
-              </td>
-            </tr>
+            <>
+              <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
+                <td>
+                  → {priorityCard.name}
+                  {priorityCard.transferExpirationDate && (
+                    <span className="due-date"> (exp. {priorityCard.transferExpirationDate})</span>
+                  )}
+                </td>
+                <td className="amount pos">
+                  +{formatCents(ccPaymentCents)}
+                  <button
+                    className={paymentStatusClassName(override.creditCardPaymentStatus)}
+                    onClick={handleToggleCreditCardPaymentStatus}
+                    aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
+                    title={paymentStatusTitle(override.creditCardPaymentStatus)}
+                  >
+                    {paymentStatusIcon(override.creditCardPaymentStatus)}
+                  </button>
+                </td>
+              </tr>
+              {savingsRemainderCents > 0 && (
+                <tr className="row-savings">
+                  <td>Savings</td>
+                  <td className="amount pos">+{formatCents(savingsRemainderCents)}</td>
+                </tr>
+              )}
+            </>
           ) : period.hasSavings ? (
             <tr className="row-savings">
               <td>Savings</td>
