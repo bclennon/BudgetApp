@@ -346,7 +346,7 @@ function PeriodCard({
             const key = billKey(bill.id);
             const status = (override.billPaymentStatuses ?? {})[key];
             return (
-              <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : ''}`}>
+              <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
                   {bill.name}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
@@ -392,7 +392,7 @@ function PeriodCard({
             const key = billKey(bill.id);
             const status = (override.billPaymentStatuses ?? {})[key];
             return (
-              <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : ''}`}>
+              <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
                   {bill.name}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
@@ -426,7 +426,7 @@ function PeriodCard({
             const key = oneTimeBillId!;
             const status = (override.billPaymentStatuses ?? {})[key];
             return (
-              <tr key={`ot-${oneTimeBillId}`} className={`row-bill row-one-time${status === 'processed' ? ' row-bill-processed' : ''}`}>
+              <tr key={`ot-${oneTimeBillId}`} className={`row-bill row-one-time${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
                   {bill.name}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
