@@ -118,7 +118,12 @@ export function generatePayPeriods(
     // Sort by due date
     billsInPeriod.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
 
-    const billsTotalCents = billsInPeriod.reduce((sum, b) => sum + b.bill.amountCents, 0);
+    const billPaymentStatuses = override?.billPaymentStatuses ?? {};
+    const billsTotalCents = billsInPeriod.reduce((sum, b) => {
+      const key = b.isOneTime ? b.oneTimeBillId! : String(b.bill.id);
+      if (billPaymentStatuses[key] === 'processed') return sum;
+      return sum + b.bill.amountCents;
+    }, 0);
     const remainingCents = effectivePaycheckCents - billsTotalCents;
     const spendingPerDayRaw = daysInPeriod > 0 ? Math.trunc(remainingCents / daysInPeriod) : 0;
     const hasSavings = spendingPerDayRaw > settings.targetSpendingPerDayCents;
