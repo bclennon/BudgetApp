@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { usePlaidLink } from 'react-plaid-link';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import type { Frequency, PaySettings } from '../domain/models';
 
 const FREQUENCY_LABELS: Record<Frequency, string> = {
@@ -19,15 +22,22 @@ function strToCents(value: string): number {
 interface Props {
   settings: PaySettings | null;
   onSave: (settings: PaySettings) => void;
+  onPlaidLinked: () => void;
 }
 
-export default function SettingsPage({ settings, onSave }: Props) {
+export default function SettingsPage({ settings, onSave, onPlaidLinked }: Props) {
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
   const [targetSpending, setTargetSpending] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+
+  // Plaid state
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [plaidLoading, setPlaidLoading] = useState(false);
+  const [plaidError, setPlaidError] = useState('');
+  const isLinked = settings?.plaidLinked ?? false;
 
   useEffect(() => {
     if (settings) {
@@ -37,6 +47,59 @@ export default function SettingsPage({ settings, onSave }: Props) {
       setTargetSpending(dollarsToStr(settings.targetSpendingPerDayCents));
     }
   }, [settings]);
+
+  // ── Plaid Link ──────────────────────────────────────────────────────────
+
+  async function handleLinkBankAccount() {
+    setPlaidError('');
+    setPlaidLoading(true);
+    try {
+      const createLinkToken = httpsCallable<Record<never, never>, { linkToken: string }>(
+        functions,
+        'createLinkToken'
+      );
+      const result = await createLinkToken({});
+      setLinkToken(result.data.linkToken);
+    } catch (err: unknown) {
+      setPlaidError(err instanceof Error ? err.message : 'Failed to start bank linking.');
+    } finally {
+      setPlaidLoading(false);
+    }
+  }
+
+  const onPlaidSuccess = useCallback(
+    async (publicToken: string) => {
+      setPlaidError('');
+      setPlaidLoading(true);
+      try {
+        const exchangePublicToken = httpsCallable<{ publicToken: string }, { success: boolean }>(
+          functions,
+          'exchangePublicToken'
+        );
+        await exchangePublicToken({ publicToken });
+        setLinkToken(null);
+        onPlaidLinked();
+      } catch (err: unknown) {
+        setPlaidError(err instanceof Error ? err.message : 'Failed to link bank account.');
+      } finally {
+        setPlaidLoading(false);
+      }
+    },
+    [onPlaidLinked]
+  );
+
+  const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
+    token: linkToken,
+    onSuccess: onPlaidSuccess,
+    onExit: () => setLinkToken(null),
+  });
+
+  // Open the Plaid modal automatically once a link token is available.
+  useEffect(() => {
+    if (linkToken && plaidReady) {
+      openPlaidLink();
+    }
+  }, [linkToken, plaidReady, openPlaidLink]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -117,6 +180,37 @@ export default function SettingsPage({ settings, onSave }: Props) {
             <button type="submit" className="btn-primary">Save Settings</button>
           </div>
         </form>
+      </div>
+
+      <div className="card">
+        <h2 className="card-title">Bank Account</h2>
+        <p className="field-hint">
+          Link your Wells Fargo Checking account to use your current balance as the paycheck
+          amount for any pay period.
+        </p>
+        {plaidError && <p className="form-error">{plaidError}</p>}
+        {isLinked ? (
+          <div className="plaid-status">
+            <span className="plaid-linked-badge">✓ Bank account linked</span>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleLinkBankAccount}
+              disabled={plaidLoading}
+            >
+              {plaidLoading ? 'Connecting…' : 'Re-link Account'}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleLinkBankAccount}
+            disabled={plaidLoading}
+          >
+            {plaidLoading ? 'Connecting…' : '🏦 Link Bank Account'}
+          </button>
+        )}
       </div>
     </div>
   );

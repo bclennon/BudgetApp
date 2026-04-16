@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import type { Bill, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
 import { emptyOverride } from '../domain/models';
 import { generatePayPeriods } from '../domain/payPeriodGenerator';
@@ -244,6 +246,8 @@ interface PeriodCardProps {
   allPeriods: PayPeriod[];
   override: PayPeriodOverride;
   defaultPaycheckCents: number;
+  isCurrentPeriod: boolean;
+  plaidLinked: boolean;
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
@@ -254,6 +258,8 @@ function PeriodCard({
   allPeriods,
   override,
   defaultPaycheckCents,
+  isCurrentPeriod,
+  plaidLinked,
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
@@ -261,6 +267,8 @@ function PeriodCard({
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
   const [addingOneTime, setAddingOneTime] = useState(false);
+  const [fetchingBalance, setFetchingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState('');
 
   const isPaycheckOverridden = override.paycheckAmountCents !== undefined;
 
@@ -282,6 +290,23 @@ function PeriodCard({
 
   function handleDeleteOneTime(id: string) {
     onUpdateOverride({ oneTimeBills: override.oneTimeBills.filter((b) => b.id !== id) });
+  }
+
+  async function handleUseCheckingBalance() {
+    setBalanceError('');
+    setFetchingBalance(true);
+    try {
+      const getCheckingBalance = httpsCallable<Record<never, never>, { balanceCents: number }>(
+        functions,
+        'getCheckingBalance'
+      );
+      const result = await getCheckingBalance({});
+      onUpdateOverride({ paycheckAmountCents: result.data.balanceCents });
+    } catch (err: unknown) {
+      setBalanceError(err instanceof Error ? err.message : 'Failed to fetch balance.');
+    } finally {
+      setFetchingBalance(false);
+    }
   }
 
   function handleTogglePaymentStatus(billKey: string) {
@@ -329,8 +354,26 @@ function PeriodCard({
               >
                 ✏️
               </button>
+              {isCurrentPeriod && plaidLinked && (
+                <button
+                  className="btn-xs btn-inline"
+                  onClick={handleUseCheckingBalance}
+                  disabled={fetchingBalance}
+                  aria-label="Use Wells Fargo Checking balance as paycheck"
+                  title="Set paycheck to current Wells Fargo Checking balance"
+                >
+                  {fetchingBalance ? '…' : '🏦'}
+                </button>
+              )}
             </td>
           </tr>
+          {balanceError && (
+            <tr className="row-balance-error">
+              <td colSpan={2}>
+                <span className="inline-error">{balanceError}</span>
+              </td>
+            </tr>
+          )}
           {editingPaycheck && (
             <PaycheckEditRow
               currentCents={period.paycheckAmountCents}
@@ -513,6 +556,7 @@ interface Props {
   bills: Bill[];
   settings: PaySettings | null;
   overrides: PeriodOverrides;
+  plaidLinked: boolean;
   onUpdatePeriodOverride: (periodStart: string, patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string) => void;
@@ -524,6 +568,7 @@ export default function PayPeriodsPage({
   bills,
   settings,
   overrides,
+  plaidLinked,
   onUpdatePeriodOverride,
   onMoveBill,
   onUnmoveBill,
@@ -539,6 +584,7 @@ export default function PayPeriodsPage({
     );
   }
 
+  const today = new Date().toISOString().slice(0, 10);
   const periods = generatePayPeriods(settings, bills, 24, overrides);
 
   return (
@@ -562,6 +608,8 @@ export default function PayPeriodsPage({
             allPeriods={periods}
             override={overrides[p.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
+            isCurrentPeriod={p.startDate <= today && today <= p.endDate}
+            plaidLinked={plaidLinked}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, p.startDate, toPeriodStart, toDueDate)

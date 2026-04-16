@@ -95,6 +95,11 @@ function AppShell() {
     if (user) saveSettingsToCloud(user.uid, s);
   }
 
+  function handlePlaidLinked() {
+    if (!settings) return;
+    updateSettings({ ...settings, plaidLinked: true });
+  }
+
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
     const updated = [...bills];
     for (const item of items) {
@@ -216,6 +221,7 @@ function AppShell() {
             bills={bills}
             settings={settings}
             overrides={periodOverrides}
+            plaidLinked={settings?.plaidLinked ?? false}
             onUpdatePeriodOverride={updatePeriodOverride}
             onMoveBill={moveBill}
             onUnmoveBill={unmoveBill}
@@ -226,7 +232,7 @@ function AppShell() {
         {tab === 'bills' && (
           <BillsPage bills={bills} onAdd={addBill} onUpdate={updateBill} onDelete={deleteBill} onImportBills={importBills} />
         )}
-        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} />}
+        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onPlaidLinked={handlePlaidLinked} />}
         {tab === 'backup' && (
           <BackupSyncPage bills={bills} settings={settings} onImport={importData} />
         )}
