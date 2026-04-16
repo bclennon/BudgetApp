@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
 import type { Bill, CreditCard, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
@@ -682,12 +682,9 @@ export default function PayPeriodsPage({
             allPeriods={periods}
             override={overrides[period.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
-            isCurrentPeriod={period.startDate <= today && today <= period.endDate}
             creditCards={adjustedCards}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(period.startDate, patch)}
             bankLinked={bankLinked}
-            creditCards={creditCards}
-            onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, period.startDate, toPeriodStart, toDueDate)
             }
