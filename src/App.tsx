@@ -189,7 +189,12 @@ function AppShell() {
 
   function updatePeriodOverride(periodStart: string, patch: Partial<PayPeriodOverride>) {
     const prev = periodOverrides[periodStart] ?? emptyOverride();
-    applyOverrides({ ...periodOverrides, [periodStart]: { ...prev, ...patch } });
+    const merged: PayPeriodOverride = { ...prev, ...patch };
+    // Remove optional fields that are explicitly cleared so that storage (especially
+    // Firestore, which rejects undefined values) doesn't receive undefined.
+    if (merged.paycheckAmountCents === undefined) delete merged.paycheckAmountCents;
+    if (merged.creditCardPaymentStatus === undefined) delete merged.creditCardPaymentStatus;
+    applyOverrides({ ...periodOverrides, [periodStart]: merged });
   }
 
   function moveBill(billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) {
