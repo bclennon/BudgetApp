@@ -253,6 +253,7 @@ interface PeriodCardProps {
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
   onBankUnlinked: () => void;
   onCreditCardPaymentProcessed: (cardId: string, amountCents: number) => void;
+  onCreditCardPaymentRestored: (cardId: string, amountCents: number) => void;
 }
 
 function PeriodCard({
@@ -267,6 +268,7 @@ function PeriodCard({
   onUnmoveBill,
   onBankUnlinked,
   onCreditCardPaymentProcessed,
+  onCreditCardPaymentRestored,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
@@ -333,18 +335,53 @@ function PeriodCard({
   }
 
   const priorityCard = getPriorityCard(creditCards);
-  const ccPaymentCents = priorityCard
-    ? Math.min(period.savingsTotalCents, priorityCard.balanceCents)
-    : 0;
-  const savingsRemainderCents = period.savingsTotalCents - ccPaymentCents;
+
+  // When a payment has been marked processed, use the stored card/amount so we
+  // can still display (and reset) the row even if the card balance is now 0.
+  const processedCard = override.creditCardPaymentCardId
+    ? creditCards.find((c) => c.id === override.creditCardPaymentCardId)
+    : undefined;
+  const displayCard = priorityCard ?? processedCard;
+
+  const isProcessed = override.creditCardPaymentStatus === 'processed';
+
+  // When processed, use the amount that was stored at payment time; otherwise
+  // calculate against the current (adjusted) balance.
+  const ccPaymentCents = isProcessed
+    ? (override.creditCardPaymentAmountCents ?? 0)
+    : (priorityCard ? Math.min(period.savingsTotalCents, priorityCard.balanceCents) : 0);
+
+  // Bug 2 fix: once a CC payment is processed, stop deducting it from savings
+  // (same behaviour as marking a regular bill as processed).
+  const savingsRemainderCents = period.savingsTotalCents - (isProcessed ? 0 : ccPaymentCents);
 
   function handleToggleCreditCardPaymentStatus() {
     const current = override.creditCardPaymentStatus;
     const next = nextPaymentStatus(current);
+
     if (next === 'processed' && priorityCard) {
+      // Reduce the card balance and persist the payment details in the override.
       onCreditCardPaymentProcessed(priorityCard.id, ccPaymentCents);
+      onUpdateOverride({
+        creditCardPaymentStatus: 'processed',
+        creditCardPaymentAmountCents: ccPaymentCents,
+        creditCardPaymentCardId: priorityCard.id,
+      });
+    } else if (next === undefined && current === 'processed') {
+      // Restore the card balance using what was stored at processing time.
+      const cardId = override.creditCardPaymentCardId;
+      const amount = override.creditCardPaymentAmountCents ?? 0;
+      if (cardId && amount > 0) {
+        onCreditCardPaymentRestored(cardId, amount);
+      }
+      onUpdateOverride({
+        creditCardPaymentStatus: undefined,
+        creditCardPaymentAmountCents: undefined,
+        creditCardPaymentCardId: undefined,
+      });
+    } else {
+      onUpdateOverride({ creditCardPaymentStatus: next });
     }
-    onUpdateOverride({ creditCardPaymentStatus: next });
   }
 
   // Separate bill types for rendering
@@ -545,13 +582,13 @@ function PeriodCard({
           )}
 
           {/* ── Credit card payment or Savings ── */}
-          {period.hasSavings && priorityCard ? (
+          {period.hasSavings && displayCard ? (
             <>
               <tr className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
-                  → {priorityCard.name}
-                  {priorityCard.transferExpirationDate && (
-                    <span className="due-date"> (exp. {priorityCard.transferExpirationDate})</span>
+                  → {displayCard.name}
+                  {displayCard.transferExpirationDate && (
+                    <span className="due-date"> (exp. {displayCard.transferExpirationDate})</span>
                   )}
                 </td>
                 <td className="amount pos">
@@ -618,6 +655,7 @@ interface Props {
   canUndo: boolean;
   onBankUnlinked: () => void;
   onCreditCardPaymentProcessed: (periodStart: string, cardId: string, amountCents: number) => void;
+  onCreditCardPaymentRestored: (periodStart: string, cardId: string, amountCents: number) => void;
 }
 
 export default function PayPeriodsPage({
@@ -633,6 +671,7 @@ export default function PayPeriodsPage({
   canUndo,
   onBankUnlinked,
   onCreditCardPaymentProcessed,
+  onCreditCardPaymentRestored,
 }: Props) {
   if (!settings) {
     return (
@@ -703,6 +742,9 @@ export default function PayPeriodsPage({
             onBankUnlinked={onBankUnlinked}
             onCreditCardPaymentProcessed={(cardId, amountCents) =>
               onCreditCardPaymentProcessed(period.startDate, cardId, amountCents)
+            }
+            onCreditCardPaymentRestored={(cardId, amountCents) =>
+              onCreditCardPaymentRestored(period.startDate, cardId, amountCents)
             }
           />
         ))}

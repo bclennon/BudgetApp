@@ -140,6 +140,12 @@ function AppShell() {
     updateCreditCard({ ...card, balanceCents: newBalance });
   }
 
+  function handleCreditCardPaymentRestored(_periodStart: string, cardId: string, amountCents: number) {
+    const card = creditCards.find((c) => c.id === cardId);
+    if (!card) return;
+    updateCreditCard({ ...card, balanceCents: card.balanceCents + amountCents });
+  }
+
   function handleBankLinked(balanceCents?: number) {
     if (!settings) return;
     updateSettings({ ...settings, bankLinked: true });
@@ -194,6 +200,8 @@ function AppShell() {
     // Firestore, which rejects undefined values) doesn't receive undefined.
     if (merged.paycheckAmountCents === undefined) delete merged.paycheckAmountCents;
     if (merged.creditCardPaymentStatus === undefined) delete merged.creditCardPaymentStatus;
+    if (merged.creditCardPaymentAmountCents === undefined) delete merged.creditCardPaymentAmountCents;
+    if (merged.creditCardPaymentCardId === undefined) delete merged.creditCardPaymentCardId;
     applyOverrides({ ...periodOverrides, [periodStart]: merged });
   }
 
@@ -293,6 +301,7 @@ function AppShell() {
             canUndo={undoHistory.length > 0}
             onBankUnlinked={handleBankUnlinked}
             onCreditCardPaymentProcessed={handleCreditCardPaymentProcessed}
+            onCreditCardPaymentRestored={handleCreditCardPaymentRestored}
           />
         )}
         {tab === 'bills' && (
