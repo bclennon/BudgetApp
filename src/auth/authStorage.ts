@@ -10,7 +10,9 @@ export function loadUser(): GoogleUser | null {
   try {
     const raw = localStorage.getItem(KEY_USER);
     return raw ? (JSON.parse(raw) as GoogleUser) : null;
-  } catch {
+  } catch (err) {
+    console.warn('budgetapp: failed to load user from localStorage, clearing stored value.', err);
+    localStorage.removeItem(KEY_USER);
     return null;
   }
 }

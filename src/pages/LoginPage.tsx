@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 import { useAuth } from '../auth/useAuth';
 
-function decodeGoogleCredential(credential: string): { name: string; email: string; picture: string } {
-  const payload = credential.split('.')[1];
-  const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-  return JSON.parse(decoded) as { name: string; email: string; picture: string };
+interface GoogleJwtPayload {
+  name: string;
+  email: string;
+  picture: string;
 }
 
 export default function LoginPage() {
   const { signIn } = useAuth();
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="login-page">
@@ -16,15 +19,23 @@ export default function LoginPage() {
         <div className="login-logo">💰</div>
         <h1 className="login-title">Budget App</h1>
         <p className="login-subtitle">Sign in to manage your budget</p>
+        {error && <p className="form-error">{error}</p>}
         <div className="login-btn-wrap">
           <GoogleLogin
             onSuccess={(response) => {
-              if (!response.credential) return;
-              const payload = decodeGoogleCredential(response.credential);
-              signIn({ name: payload.name, email: payload.email, picture: payload.picture });
+              if (!response.credential) {
+                setError('Sign-in failed: no credential returned. Please try again.');
+                return;
+              }
+              try {
+                const payload = jwtDecode<GoogleJwtPayload>(response.credential);
+                signIn({ name: payload.name, email: payload.email, picture: payload.picture });
+              } catch {
+                setError('Sign-in failed: could not read account info. Please try again.');
+              }
             }}
             onError={() => {
-              console.error('Google sign-in failed');
+              setError('Google sign-in was unsuccessful. Please try again or check your network connection.');
             }}
             useOneTap
           />
