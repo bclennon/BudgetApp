@@ -74,11 +74,20 @@ object PayPeriodGenerator {
     }
 
     private fun nextSemiMonthlyPayday(current: LocalDate): LocalDate {
-        return if (current.dayOfMonth <= 15) {
-            BillDueDateResolver.resolveDueDate(current.year, current.month, 30)
-        } else {
-            val nextMonth = current.plusMonths(1)
-            LocalDate.of(nextMonth.year, nextMonth.month, 15)
+        return when {
+            current.dayOfMonth == 15 -> {
+                // On the 15th: next is the 30th of the same month (with overflow if needed)
+                BillDueDateResolver.resolveDueDate(current.year, current.month, 30)
+            }
+            current.dayOfMonth > 15 -> {
+                // On the 30th (or any second-half day): next is the 15th of next month
+                val nextMonth = current.plusMonths(1)
+                LocalDate.of(nextMonth.year, nextMonth.month, 15)
+            }
+            else -> {
+                // Day < 15: overflowed from previous month's 30th slot → next is 15th of current month
+                LocalDate.of(current.year, current.month, 15)
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.budgetapp.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +13,7 @@ import com.example.budgetapp.data.backup.PaySettingsDto
 import com.example.budgetapp.data.db.BillEntity
 import com.example.budgetapp.data.db.PaySettingsEntity
 import com.example.budgetapp.data.preferences.BackupPreferences
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -43,6 +45,14 @@ class BackupSyncViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setBackupUri(uri: Uri) {
         viewModelScope.launch {
+            try {
+                getApplication<Application>().contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Permission may not be persistable for all URI providers; proceed anyway
+            }
             BackupPreferences.setBackupUri(getApplication(), uri.toString())
         }
     }
@@ -83,21 +93,23 @@ class BackupSyncViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.update { it.copy(isLoading = true) }
             try {
                 val backup = backupManager.readBackup(Uri.parse(uriString))
-                val billDao = db.billDao()
-                billDao.deleteAllBills()
-                backup.bills.forEach {
-                    billDao.insertBill(BillEntity(name = it.name, dayOfMonth = it.dayOfMonth, amountCents = it.amountCents))
-                }
-                backup.settings?.let { s ->
-                    db.paySettingsDao().insertOrUpdatePaySettings(
-                        PaySettingsEntity(
-                            id = 1,
-                            paycheckAmountCents = s.paycheckAmountCents,
-                            frequency = s.frequency,
-                            nextPayday = s.nextPayday,
-                            targetSpendingPerDayCents = s.targetSpendingPerDayCents
+                db.withTransaction {
+                    val billDao = db.billDao()
+                    billDao.deleteAllBills()
+                    backup.bills.forEach {
+                        billDao.insertBill(BillEntity(name = it.name, dayOfMonth = it.dayOfMonth, amountCents = it.amountCents))
+                    }
+                    backup.settings?.let { s ->
+                        db.paySettingsDao().insertOrUpdatePaySettings(
+                            PaySettingsEntity(
+                                id = 1,
+                                paycheckAmountCents = s.paycheckAmountCents,
+                                frequency = s.frequency,
+                                nextPayday = s.nextPayday,
+                                targetSpendingPerDayCents = s.targetSpendingPerDayCents
+                            )
                         )
-                    )
+                    }
                 }
                 val now = Instant.now().toString()
                 BackupPreferences.setLastSyncAt(getApplication(), now)
