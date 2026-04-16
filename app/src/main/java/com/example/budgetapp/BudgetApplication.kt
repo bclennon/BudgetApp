@@ -15,6 +15,6 @@ class BudgetApplication : Application() {
             applicationContext,
             AppDatabase::class.java,
             "budget_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
 }
