@@ -61,7 +61,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = viewModel()) {
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = frequencyExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .menuAnchor()
             )
             ExposedDropdownMenu(
                 expanded = frequencyExpanded,
