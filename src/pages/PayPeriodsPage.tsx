@@ -636,6 +636,31 @@ export default function PayPeriodsPage({
 
   const periods = generatePayPeriods(settings, bills, 24, overrides);
 
+  // Compute per-period adjusted credit card balances.
+  // When a period plans to pay savings toward a credit card (even before
+  // it is marked as submitted/processed), that amount is deducted from the
+  // running balance so that subsequent periods see the correct remaining debt.
+  // Periods whose payment is already 'processed' are skipped because the
+  // CreditCard.balanceCents in app state has already been permanently reduced.
+  const periodsWithCards = useMemo(() => {
+    const result: { period: PayPeriod; adjustedCards: CreditCard[] }[] = [];
+    let runningCards = creditCards;
+    for (const period of periods) {
+      const adjustedCards = runningCards;
+      const effectivePriorityCard = getPriorityCard(adjustedCards);
+      const override = overrides[period.startDate];
+      if (period.hasSavings && effectivePriorityCard && override?.creditCardPaymentStatus !== 'processed') {
+        runningCards = runningCards.map((c) =>
+          c.id === effectivePriorityCard.id
+            ? { ...c, balanceCents: Math.max(0, c.balanceCents - period.savingsTotalCents) }
+            : c
+        );
+      }
+      result.push({ period, adjustedCards });
+    }
+    return result;
+  }, [periods, creditCards, overrides]);
+
   return (
     <div className="page">
       <div className="page-header">
@@ -650,25 +675,28 @@ export default function PayPeriodsPage({
         </button>
       </div>
       <div className="period-list">
-        {periods.map((p) => (
+        {periodsWithCards.map(({ period, adjustedCards }) => (
           <PeriodCard
-            key={p.startDate}
-            period={p}
+            key={period.startDate}
+            period={period}
             allPeriods={periods}
-            override={overrides[p.startDate] ?? emptyOverride()}
+            override={overrides[period.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
+            isCurrentPeriod={period.startDate <= today && today <= period.endDate}
+            creditCards={adjustedCards}
+            onUpdateOverride={(patch) => onUpdatePeriodOverride(period.startDate, patch)}
             bankLinked={bankLinked}
             creditCards={creditCards}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(p.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
-              onMoveBill(billId, p.startDate, toPeriodStart, toDueDate)
+              onMoveBill(billId, period.startDate, toPeriodStart, toDueDate)
             }
             onUnmoveBill={(billId, fromPeriodStart) =>
-              onUnmoveBill(billId, fromPeriodStart, p.startDate)
+              onUnmoveBill(billId, fromPeriodStart, period.startDate)
             }
             onBankUnlinked={onBankUnlinked}
             onCreditCardPaymentProcessed={(cardId, amountCents) =>
-              onCreditCardPaymentProcessed(p.startDate, cardId, amountCents)
+              onCreditCardPaymentProcessed(period.startDate, cardId, amountCents)
             }
           />
         ))}
