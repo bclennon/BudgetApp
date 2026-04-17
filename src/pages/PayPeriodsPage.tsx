@@ -712,6 +712,8 @@ function PeriodCard({
               </tr>
             );
           })}
+          {/* One-time bills are period-specific entries, so editing updates their amount directly
+              rather than through billAmountOverrides. There is no original "bill amount" to reset to. */}
           {editingBillKey !== null && oneTimeBills.some((b) => b.oneTimeBillId === editingBillKey) && (() => {
             const editing = oneTimeBills.find((b) => b.oneTimeBillId === editingBillKey)!;
             return (
