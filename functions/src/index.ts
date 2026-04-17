@@ -110,11 +110,47 @@ interface SophtronAccount {
   AccountBalance: number;
 }
 
+interface SophtronJobStatus {
+  SuccessFlag: boolean | null;
+  LastStatus: string;
+}
+
+/**
+ * Polls the Sophtron job until it succeeds or times out.
+ * Resolves when the job succeeds or accounts are ready,
+ * throws an HttpsError on failure or timeout.
+ */
+async function waitForSophtronJob(jobId: string): Promise<void> {
+  const maxAttempts = 15;
+  const pollIntervalMs = 4000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+    const job = await sophtronPost<SophtronJobStatus>(
+      'Job/GetJobInformationByID',
+      { JobID: jobId }
+    );
+
+    if (job.SuccessFlag === true || job.LastStatus === 'AccountsReady') {
+      return;
+    }
+
+    if (job.SuccessFlag === false && job.LastStatus === 'Completed') {
+      throw new HttpsError('internal', 'Failed to refresh account balance. Please relink your account in Settings.');
+    }
+  }
+
+  throw new HttpsError('unavailable', 'Balance refresh timed out. Please try again later.');
+}
+
 /**
  * Fetches the current balance of the linked checking account via Sophtron.
+ * If the balance is not yet available it triggers a refresh and waits for
+ * the job to complete before returning the updated balance.
  * Returns `{ balanceCents: number }`.
  */
-export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'] }, async (request) => {
+export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'], timeoutSeconds: 120 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'You must be signed in.');
   }
@@ -130,7 +166,7 @@ export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'] 
 
   const { userInstitutionId } = snap.data() as { userInstitutionId: string };
 
-  const accounts = await sophtronPost<SophtronAccount[]>(
+  let accounts = await sophtronPost<SophtronAccount[]>(
     'UserInstitution/GetUserInstitutionAccounts',
     { UserInstitutionID: userInstitutionId }
   );
@@ -139,7 +175,7 @@ export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'] 
     throw new HttpsError('not-found', 'No accounts found on the linked institution.');
   }
 
-  const checking = accounts.find(
+  let checking = accounts.find(
     (a) => a.AccountType && a.AccountType.toLowerCase().includes('checking')
   );
 
@@ -147,11 +183,30 @@ export const getCheckingBalance = onCall({ cors: ['https://bclennon.github.io'] 
     throw new HttpsError('not-found', 'No checking account found on the linked institution.');
   }
 
+  // If the balance is stale (null/undefined), trigger a Sophtron refresh and wait.
   if (checking.AccountBalance === null || checking.AccountBalance === undefined) {
-    throw new HttpsError(
-      'unavailable',
-      'Checking account balance is currently unavailable. Please try again later.'
+    const refreshResult = await sophtronPost<{ JobID: string }>(
+      'UserInstitutionAccount/RefreshUserInstitutionAccount',
+      { AccountID: checking.AccountID }
     );
+
+    await waitForSophtronJob(refreshResult.JobID);
+
+    accounts = await sophtronPost<SophtronAccount[]>(
+      'UserInstitution/GetUserInstitutionAccounts',
+      { UserInstitutionID: userInstitutionId }
+    );
+
+    checking = accounts.find(
+      (a) => a.AccountType && a.AccountType.toLowerCase().includes('checking')
+    );
+
+    if (!checking || checking.AccountBalance === null || checking.AccountBalance === undefined) {
+      throw new HttpsError(
+        'unavailable',
+        'Checking account balance is currently unavailable. Please try again later.'
+      );
+    }
   }
 
   const balanceCents = Math.round(checking.AccountBalance * 100);
