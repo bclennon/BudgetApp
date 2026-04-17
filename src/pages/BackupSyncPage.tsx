@@ -30,7 +30,7 @@ export default function BackupSyncPage({ bills, settings, creditCards, periodOve
     try {
       const token = await requestSheetsToken();
       const periods = settings ? generatePayPeriods(settings, bills, EXPORT_PERIODS_COUNT, periodOverrides) : [];
-      const url = await exportToGoogleSheets(token, { bills, creditCards, periods });
+      const url = await exportToGoogleSheets(token, { bills, creditCards, periods, periodOverrides });
       setSheetsUrl(url);
       setStatus('Spreadsheet created successfully.');
       setError('');
