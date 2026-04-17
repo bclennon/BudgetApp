@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { useIconTheme } from '../theme/IconThemeContext';
 
 export default function SignInPage() {
   const { signInWithGoogle } = useAuth();
+  const { iconTheme } = useIconTheme();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -22,7 +24,7 @@ export default function SignInPage() {
   return (
     <div className="signin-screen">
       <div className="signin-card">
-        <div className="signin-logo">💰</div>
+        <div className="signin-logo">{iconTheme.icons.logo}</div>
         <h1 className="signin-title">Budget App</h1>
         <p className="signin-desc">
           Sign in to access your bills and pay period data from any device.
