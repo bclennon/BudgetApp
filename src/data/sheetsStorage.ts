@@ -131,6 +131,29 @@ export async function getOrCreateSpreadsheet(token: string, uid: string): Promis
   return id;
 }
 
+/**
+ * Looks up the spreadsheet ID for this user without creating a new one.
+ * Checks the localStorage cache first, then searches Google Drive.
+ * Returns the ID if found, or null if no matching spreadsheet exists.
+ */
+export async function findSpreadsheetId(token: string, uid: string): Promise<string | null> {
+  const stored = getStoredSpreadsheetId(uid);
+  if (stored) return stored;
+  const existing = await findExistingSpreadsheet(token);
+  if (existing) storeSpreadsheetId(uid, existing);
+  return existing;
+}
+
+/**
+ * Creates a new BudgetApp Data spreadsheet, caches its ID in localStorage,
+ * and returns the ID.
+ */
+export async function createNewSpreadsheet(token: string, uid: string): Promise<string> {
+  const id = await createDataSpreadsheet(token);
+  storeSpreadsheetId(uid, id);
+  return id;
+}
+
 // ── Low-level cell read/write ─────────────────────────────────────────────────
 
 async function readSheetValue<T>(

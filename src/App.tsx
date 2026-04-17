@@ -8,6 +8,8 @@ import {
 } from './data/storage';
 import {
   getOrCreateSpreadsheet,
+  findSpreadsheetId,
+  createNewSpreadsheet,
   loadAllFromSheets,
   saveBillsToSheets,
   saveSettingsToSheets,
@@ -56,6 +58,8 @@ function AppShell() {
   const [spreadsheetNotFound, setSpreadsheetNotFound] = useState(false);
   /** Non-null when expected sheet tabs are missing; holds the list of missing tab names. */
   const [missingSheetTabs, setMissingSheetTabs] = useState<string[] | null>(null);
+  /** True when no BudgetApp Data spreadsheet was found in the user's Drive. */
+  const [spreadsheetNotOnDrive, setSpreadsheetNotOnDrive] = useState(false);
   /** Incrementing this causes the Sheets sync useEffect to re-run (e.g. after repairing missing tabs). */
   const [syncKey, setSyncKey] = useState(0);
   // Holds the active spreadsheet ID once resolved.
@@ -121,6 +125,21 @@ function AppShell() {
     const uid = user.uid;
     async function syncFromSheets() {
       try {
+        // If we don't already know the spreadsheet ID, check whether one exists
+        // before calling getSheetContext (which would auto-create one). This lets
+        // us prompt the user before creating a brand-new spreadsheet.
+        if (!spreadsheetIdRef.current) {
+          const token = await getToken();
+          const existingId = await findSpreadsheetId(token, uid);
+          if (!existingId) {
+            if (!cancelled) {
+              setSpreadsheetNotOnDrive(true);
+              setDataReady(true);
+            }
+            return;
+          }
+          spreadsheetIdRef.current = existingId;
+        }
         const ctx = await getSheetContext(uid);
         if (!ctx || cancelled) return;
         const data = await loadAllFromSheets(ctx.token, ctx.spreadsheetId);
@@ -210,11 +229,8 @@ function AppShell() {
     }
   }
 
-  /** Called when the user confirms they want a new spreadsheet after the old one was not found. */
-  async function handleCreateNewSpreadsheet() {
-    if (!user) return;
-    setSpreadsheetNotFound(false);
-    // Push current local data to the newly created spreadsheet.
+  /** Pushes all current local data to the active spreadsheet and sets a banner if any save fails. */
+  async function pushLocalDataToSheets() {
     const results = await Promise.allSettled([
       saveBillsCloud(bills),
       ...(settings ? [saveSettingsCloud(settings)] : []),
@@ -225,6 +241,13 @@ function AppShell() {
     if (anyFailed) {
       setCloudSaveError('Some data could not be saved to the new Google Sheets file. Your changes are saved locally.');
     }
+  }
+
+  /** Called when the user confirms they want a new spreadsheet after the old one was not found. */
+  async function handleCreateNewSpreadsheet() {
+    if (!user) return;
+    setSpreadsheetNotFound(false);
+    await pushLocalDataToSheets();
   }
 
   /** Called when the user wants to add the missing sheet tabs back to the existing spreadsheet. */
@@ -243,6 +266,25 @@ function AppShell() {
       console.error('Failed to add missing sheet tabs:', err);
       setCloudSaveError('Could not add the missing sheet tabs. Please try again.');
     }
+  }
+
+  /** Called when the user confirms they want to create a new BudgetApp Data spreadsheet. */
+  async function handleCreateSpreadsheet() {
+    if (!user) return;
+    setSpreadsheetNotOnDrive(false);
+    setDataReady(false);
+    try {
+      const token = await getToken();
+      const newId = await createNewSpreadsheet(token, user.uid);
+      spreadsheetIdRef.current = newId;
+    } catch (err) {
+      console.error('Failed to create spreadsheet:', err);
+      setCloudSaveError('Could not create the spreadsheet. Please try again.');
+      setDataReady(true);
+      return;
+    }
+    await pushLocalDataToSheets();
+    setDataReady(true);
   }
 
   function addBill(name: string, dayOfMonth: number, amountCents: number, url: string) {
@@ -488,6 +530,26 @@ function AppShell() {
                 Add Missing Tabs
               </button>
               <button className="btn-secondary" onClick={() => setMissingSheetTabs(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {spreadsheetNotOnDrive && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">📄 No Data File Found</h2>
+            <p className="modal-body">
+              No <strong>BudgetApp Data</strong> spreadsheet was found in your Google Drive.
+              Would you like to create one? Your locally saved data will be synced to the new file.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleCreateSpreadsheet}>
+                Create Spreadsheet
+              </button>
+              <button className="btn-secondary" onClick={() => setSpreadsheetNotOnDrive(false)}>
                 Cancel
               </button>
             </div>
