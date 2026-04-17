@@ -7,6 +7,16 @@ const SHEET_SETTINGS = 'Settings';
 const SHEET_OVERRIDES = 'PeriodOverrides';
 const SHEET_CARDS = 'CreditCards';
 
+// ── Custom errors ─────────────────────────────────────────────────────────────
+
+/** Thrown when the spreadsheet ID is no longer valid (e.g. the spreadsheet was deleted). */
+export class SpreadsheetNotFoundError extends Error {
+  constructor(spreadsheetId: string) {
+    super(`Spreadsheet not found (id: ${spreadsheetId})`);
+    this.name = 'SpreadsheetNotFoundError';
+  }
+}
+
 const SPREADSHEET_TITLE = 'BudgetApp Data';
 
 // ── Spreadsheet ID persistence ────────────────────────────────────────────────
@@ -21,6 +31,10 @@ export function getStoredSpreadsheetId(uid: string): string | null {
 
 function storeSpreadsheetId(uid: string, id: string): void {
   localStorage.setItem(spreadsheetIdKey(uid), id);
+}
+
+export function clearStoredSpreadsheetId(uid: string): void {
+  localStorage.removeItem(spreadsheetIdKey(uid));
 }
 
 // ── Sheets API helpers ────────────────────────────────────────────────────────
@@ -108,7 +122,7 @@ async function readSheetValue<T>(
   const url = `${SHEETS_BASE}/${spreadsheetId}/values/${range}`;
   const res = await sheetsRequest('GET', url, token);
   if (!res.ok) {
-    if (res.status === 404) return null;
+    if (res.status === 404) throw new SpreadsheetNotFoundError(spreadsheetId);
     throw new Error(`Failed to read sheet "${sheetName}" (HTTP ${res.status}).`);
   }
   const json = (await res.json()) as { values?: string[][] };

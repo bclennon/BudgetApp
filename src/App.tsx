@@ -13,6 +13,8 @@ import {
   saveSettingsToSheets,
   savePeriodOverridesToSheets,
   saveCreditCardsToSheets,
+  clearStoredSpreadsheetId,
+  SpreadsheetNotFoundError,
 } from './data/sheetsStorage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -46,6 +48,10 @@ function AppShell() {
   const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
   /** True once the initial load attempt (from Sheets or localStorage) has completed. */
   const [dataReady, setDataReady] = useState(false);
+  /** Non-null when a cloud save failed; shown as a dismissible error banner. */
+  const [cloudSaveError, setCloudSaveError] = useState<string | null>(null);
+  /** True when the stored spreadsheet ID is stale (spreadsheet was deleted). */
+  const [spreadsheetNotFound, setSpreadsheetNotFound] = useState(false);
   // Holds the active spreadsheet ID once resolved.
   const spreadsheetIdRef = useRef<string | null>(null);
   // Deduplicates concurrent getOrCreateSpreadsheet calls to prevent race-condition duplicates.
@@ -130,7 +136,16 @@ function AppShell() {
           saveCreditCards(data.creditCards);
         }
       } catch (err) {
-        console.error('Failed to sync from Google Sheets:', err);
+        if (err instanceof SpreadsheetNotFoundError) {
+          if (!cancelled) {
+            clearStoredSpreadsheetId(uid);
+            spreadsheetIdRef.current = null;
+            spreadsheetIdPromiseRef.current = null;
+            setSpreadsheetNotFound(true);
+          }
+        } else {
+          console.error('Failed to sync from Google Sheets:', err);
+        }
       } finally {
         if (!cancelled) setDataReady(true);
       }
@@ -147,6 +162,7 @@ function AppShell() {
       await saveBillsToSheets(ctx.token, ctx.spreadsheetId, bills);
     } catch (err) {
       console.error('Failed to save bills to Google Sheets:', err);
+      setCloudSaveError('Could not save bills to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -158,6 +174,7 @@ function AppShell() {
       await saveSettingsToSheets(ctx.token, ctx.spreadsheetId, settings);
     } catch (err) {
       console.error('Failed to save settings to Google Sheets:', err);
+      setCloudSaveError('Could not save settings to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -169,6 +186,7 @@ function AppShell() {
       await savePeriodOverridesToSheets(ctx.token, ctx.spreadsheetId, overrides);
     } catch (err) {
       console.error('Failed to save period overrides to Google Sheets:', err);
+      setCloudSaveError('Could not save period data to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -180,6 +198,24 @@ function AppShell() {
       await saveCreditCardsToSheets(ctx.token, ctx.spreadsheetId, cards);
     } catch (err) {
       console.error('Failed to save credit cards to Google Sheets:', err);
+      setCloudSaveError('Could not save credit cards to Google Sheets. Your changes are saved locally.');
+    }
+  }
+
+  /** Called when the user confirms they want a new spreadsheet after the old one was not found. */
+  async function handleCreateNewSpreadsheet() {
+    if (!user) return;
+    setSpreadsheetNotFound(false);
+    // Push current local data to the newly created spreadsheet.
+    const results = await Promise.allSettled([
+      saveBillsCloud(bills),
+      ...(settings ? [saveSettingsCloud(settings)] : []),
+      saveOverridesCloud(periodOverrides),
+      saveCardsCloud(creditCards),
+    ]);
+    const anyFailed = results.some((r) => r.status === 'rejected');
+    if (anyFailed) {
+      setCloudSaveError('Some data could not be saved to the new Google Sheets file. Your changes are saved locally.');
     }
   }
 
@@ -383,6 +419,33 @@ function AppShell() {
 
       {!dataReady && (
         <div className="cloud-loading-bar">Syncing data…</div>
+      )}
+
+      {cloudSaveError && (
+        <div className="cloud-error-bar" role="alert">
+          ⚠️ {cloudSaveError}
+          <button className="cloud-error-dismiss" onClick={() => setCloudSaveError(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
+      {spreadsheetNotFound && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">📄 Data File Not Found</h2>
+            <p className="modal-body">
+              Your Google Sheets data file could not be found. It may have been deleted or moved.
+              Would you like to create a new one? Your locally saved data will be preserved and synced to the new file.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleCreateNewSpreadsheet}>
+                Create New Spreadsheet
+              </button>
+              <button className="btn-secondary" onClick={() => setSpreadsheetNotFound(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <main className="content">
