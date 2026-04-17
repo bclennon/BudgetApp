@@ -14,6 +14,7 @@ export interface Bill {
   name: string;
   dayOfMonth: number; // 1-31
   amountCents: number;
+  url?: string; // optional payment URL
 }
 
 export interface PaySettings {

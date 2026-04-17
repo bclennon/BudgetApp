@@ -237,6 +237,17 @@ function billKey(billId: number): string {
   return String(billId);
 }
 
+/** Returns the URL only if it uses the http or https protocol; otherwise returns null. */
+function safeBillUrl(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Period card ────────────────────────────────────────────────────────────
 
 interface PeriodCardProps {
@@ -476,7 +487,7 @@ function PeriodCard({
             return (
               <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
-                  {bill.name}
+                  {(() => { const href = safeBillUrl(bill.url); return href ? (<a href={href} target="_blank" rel="noopener noreferrer">{bill.name}</a>) : bill.name; })()}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
                 </td>
                 <td className="amount neg">
@@ -522,7 +533,7 @@ function PeriodCard({
             return (
               <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
-                  {bill.name}
+                  {(() => { const href = safeBillUrl(bill.url); return href ? (<a href={href} target="_blank" rel="noopener noreferrer">{bill.name}</a>) : bill.name; })()}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
                   <span className="moved-tag"> ↔ moved</span>
                 </td>

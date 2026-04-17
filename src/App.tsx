@@ -79,8 +79,10 @@ function AppShell() {
     return () => { cancelled = true; };
   }, [user]);
 
-  function addBill(name: string, dayOfMonth: number, amountCents: number) {
-    const updated = [...bills, { id: getNextBillId(bills), name, dayOfMonth, amountCents }];
+  function addBill(name: string, dayOfMonth: number, amountCents: number, url: string) {
+    const newBill: Bill = { id: getNextBillId(bills), name, dayOfMonth, amountCents };
+    if (url) newBill.url = url;
+    const updated = [...bills, newBill];
     setBills(updated);
     saveBills(updated);
     if (user) saveBillsToCloud(user.uid, updated);
