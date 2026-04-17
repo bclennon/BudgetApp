@@ -8,11 +8,17 @@ import {
 } from './data/storage';
 import {
   getOrCreateSpreadsheet,
+  findSpreadsheetId,
+  createNewSpreadsheet,
   loadAllFromSheets,
   saveBillsToSheets,
   saveSettingsToSheets,
   savePeriodOverridesToSheets,
   saveCreditCardsToSheets,
+  clearStoredSpreadsheetId,
+  addSheetTabsToSpreadsheet,
+  SpreadsheetNotFoundError,
+  SheetTabsNotFoundError,
 } from './data/sheetsStorage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -46,6 +52,16 @@ function AppShell() {
   const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
   /** True once the initial load attempt (from Sheets or localStorage) has completed. */
   const [dataReady, setDataReady] = useState(false);
+  /** Non-null when a cloud save failed; shown as a dismissible error banner. */
+  const [cloudSaveError, setCloudSaveError] = useState<string | null>(null);
+  /** True when the stored spreadsheet ID is stale (spreadsheet was deleted). */
+  const [spreadsheetNotFound, setSpreadsheetNotFound] = useState(false);
+  /** Non-null when expected sheet tabs are missing; holds the list of missing tab names. */
+  const [missingSheetTabs, setMissingSheetTabs] = useState<string[] | null>(null);
+  /** True when no BudgetApp Data spreadsheet was found in the user's Drive. */
+  const [spreadsheetNotOnDrive, setSpreadsheetNotOnDrive] = useState(false);
+  /** Incrementing this causes the Sheets sync useEffect to re-run (e.g. after repairing missing tabs). */
+  const [syncKey, setSyncKey] = useState(0);
   // Holds the active spreadsheet ID once resolved.
   const spreadsheetIdRef = useRef<string | null>(null);
   // Deduplicates concurrent getOrCreateSpreadsheet calls to prevent race-condition duplicates.
@@ -109,6 +125,21 @@ function AppShell() {
     const uid = user.uid;
     async function syncFromSheets() {
       try {
+        // If we don't already know the spreadsheet ID, check whether one exists
+        // before calling getSheetContext (which would auto-create one). This lets
+        // us prompt the user before creating a brand-new spreadsheet.
+        if (!spreadsheetIdRef.current) {
+          const token = await getToken();
+          const existingId = await findSpreadsheetId(token, uid);
+          if (!existingId) {
+            if (!cancelled) {
+              setSpreadsheetNotOnDrive(true);
+              setDataReady(true);
+            }
+            return;
+          }
+          spreadsheetIdRef.current = existingId;
+        }
         const ctx = await getSheetContext(uid);
         if (!ctx || cancelled) return;
         const data = await loadAllFromSheets(ctx.token, ctx.spreadsheetId);
@@ -130,14 +161,25 @@ function AppShell() {
           saveCreditCards(data.creditCards);
         }
       } catch (err) {
-        console.error('Failed to sync from Google Sheets:', err);
+        if (err instanceof SpreadsheetNotFoundError) {
+          if (!cancelled) {
+            clearStoredSpreadsheetId(uid);
+            spreadsheetIdRef.current = null;
+            spreadsheetIdPromiseRef.current = null;
+            setSpreadsheetNotFound(true);
+          }
+        } else if (err instanceof SheetTabsNotFoundError) {
+          if (!cancelled) setMissingSheetTabs(err.missingTabs);
+        } else {
+          console.error('Failed to sync from Google Sheets:', err);
+        }
       } finally {
         if (!cancelled) setDataReady(true);
       }
     }
     syncFromSheets();
     return () => { cancelled = true; };
-  }, [user, sheetsToken, getSheetContext]);
+  }, [user, sheetsToken, getSheetContext, syncKey]);
 
   async function saveBillsCloud(bills: Bill[]) {
     if (!user) return;
@@ -147,6 +189,7 @@ function AppShell() {
       await saveBillsToSheets(ctx.token, ctx.spreadsheetId, bills);
     } catch (err) {
       console.error('Failed to save bills to Google Sheets:', err);
+      setCloudSaveError('Could not save bills to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -158,6 +201,7 @@ function AppShell() {
       await saveSettingsToSheets(ctx.token, ctx.spreadsheetId, settings);
     } catch (err) {
       console.error('Failed to save settings to Google Sheets:', err);
+      setCloudSaveError('Could not save settings to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -169,6 +213,7 @@ function AppShell() {
       await savePeriodOverridesToSheets(ctx.token, ctx.spreadsheetId, overrides);
     } catch (err) {
       console.error('Failed to save period overrides to Google Sheets:', err);
+      setCloudSaveError('Could not save period data to Google Sheets. Your changes are saved locally.');
     }
   }
 
@@ -180,7 +225,66 @@ function AppShell() {
       await saveCreditCardsToSheets(ctx.token, ctx.spreadsheetId, cards);
     } catch (err) {
       console.error('Failed to save credit cards to Google Sheets:', err);
+      setCloudSaveError('Could not save credit cards to Google Sheets. Your changes are saved locally.');
     }
+  }
+
+  /** Pushes all current local data to the active spreadsheet and sets a banner if any save fails. */
+  async function pushLocalDataToSheets() {
+    const results = await Promise.allSettled([
+      saveBillsCloud(bills),
+      ...(settings ? [saveSettingsCloud(settings)] : []),
+      saveOverridesCloud(periodOverrides),
+      saveCardsCloud(creditCards),
+    ]);
+    const anyFailed = results.some((r) => r.status === 'rejected');
+    if (anyFailed) {
+      setCloudSaveError('Some data could not be saved to the new Google Sheets file. Your changes are saved locally.');
+    }
+  }
+
+  /** Called when the user confirms they want a new spreadsheet after the old one was not found. */
+  async function handleCreateNewSpreadsheet() {
+    if (!user) return;
+    setSpreadsheetNotFound(false);
+    await pushLocalDataToSheets();
+  }
+
+  /** Called when the user wants to add the missing sheet tabs back to the existing spreadsheet. */
+  async function handleAddMissingSheetTabs() {
+    if (!user || !missingSheetTabs) return;
+    const tabs = missingSheetTabs;
+    setMissingSheetTabs(null);
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await addSheetTabsToSpreadsheet(ctx.token, ctx.spreadsheetId, tabs);
+      // Re-trigger the sync so the newly created tabs are loaded.
+      setDataReady(false);
+      setSyncKey((k) => k + 1);
+    } catch (err) {
+      console.error('Failed to add missing sheet tabs:', err);
+      setCloudSaveError('Could not add the missing sheet tabs. Please try again.');
+    }
+  }
+
+  /** Called when the user confirms they want to create a new BudgetApp Data spreadsheet. */
+  async function handleCreateSpreadsheet() {
+    if (!user) return;
+    setSpreadsheetNotOnDrive(false);
+    setDataReady(false);
+    try {
+      const token = await getToken();
+      const newId = await createNewSpreadsheet(token, user.uid);
+      spreadsheetIdRef.current = newId;
+    } catch (err) {
+      console.error('Failed to create spreadsheet:', err);
+      setCloudSaveError('Could not create the spreadsheet. Please try again.');
+      setDataReady(true);
+      return;
+    }
+    await pushLocalDataToSheets();
+    setDataReady(true);
   }
 
   function addBill(name: string, dayOfMonth: number, amountCents: number, url: string) {
@@ -383,6 +487,74 @@ function AppShell() {
 
       {!dataReady && (
         <div className="cloud-loading-bar">Syncing data…</div>
+      )}
+
+      {cloudSaveError && (
+        <div className="cloud-error-bar" role="alert">
+          ⚠️ {cloudSaveError}
+          <button className="cloud-error-dismiss" onClick={() => setCloudSaveError(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
+      {spreadsheetNotFound && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">📄 Data File Not Found</h2>
+            <p className="modal-body">
+              Your Google Sheets data file could not be found. It may have been deleted or moved.
+              Would you like to create a new one? Your locally saved data will be preserved and synced to the new file.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleCreateNewSpreadsheet}>
+                Create New Spreadsheet
+              </button>
+              <button className="btn-secondary" onClick={() => setSpreadsheetNotFound(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {missingSheetTabs && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">⚠️ Missing Sheet Tabs</h2>
+            <p className="modal-body">
+              The following tabs were not found in your Google Sheets data file:{' '}
+              <strong>{missingSheetTabs.join(', ')}</strong>.
+              They may have been renamed or deleted. Would you like to add them back?
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleAddMissingSheetTabs}>
+                Add Missing Tabs
+              </button>
+              <button className="btn-secondary" onClick={() => setMissingSheetTabs(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {spreadsheetNotOnDrive && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">📄 No Data File Found</h2>
+            <p className="modal-body">
+              No <strong>BudgetApp Data</strong> spreadsheet was found in your Google Drive.
+              Would you like to create one? Your locally saved data will be synced to the new file.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleCreateSpreadsheet}>
+                Create Spreadsheet
+              </button>
+              <button className="btn-secondary" onClick={() => setSpreadsheetNotOnDrive(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <main className="content">

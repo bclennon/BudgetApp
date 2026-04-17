@@ -7,6 +7,36 @@ const SHEET_SETTINGS = 'Settings';
 const SHEET_OVERRIDES = 'PeriodOverrides';
 const SHEET_CARDS = 'CreditCards';
 
+// ── Custom errors ─────────────────────────────────────────────────────────────
+
+/** Thrown when the spreadsheet ID is no longer valid (e.g. the spreadsheet was deleted). */
+export class SpreadsheetNotFoundError extends Error {
+  constructor(spreadsheetId: string) {
+    super(`Spreadsheet not found (id: ${spreadsheetId})`);
+    this.name = 'SpreadsheetNotFoundError';
+  }
+}
+
+/** Thrown when a specific sheet tab does not exist within the spreadsheet. */
+export class SheetTabNotFoundError extends Error {
+  readonly tabName: string;
+  constructor(tabName: string) {
+    super(`Sheet tab "${tabName}" not found in spreadsheet.`);
+    this.name = 'SheetTabNotFoundError';
+    this.tabName = tabName;
+  }
+}
+
+/** Thrown by {@link loadAllFromSheets} when one or more expected sheet tabs are missing. */
+export class SheetTabsNotFoundError extends Error {
+  readonly missingTabs: string[];
+  constructor(missingTabs: string[]) {
+    super(`Missing sheet tabs: ${missingTabs.join(', ')}`);
+    this.name = 'SheetTabsNotFoundError';
+    this.missingTabs = missingTabs;
+  }
+}
+
 const SPREADSHEET_TITLE = 'BudgetApp Data';
 
 // ── Spreadsheet ID persistence ────────────────────────────────────────────────
@@ -21,6 +51,10 @@ export function getStoredSpreadsheetId(uid: string): string | null {
 
 function storeSpreadsheetId(uid: string, id: string): void {
   localStorage.setItem(spreadsheetIdKey(uid), id);
+}
+
+export function clearStoredSpreadsheetId(uid: string): void {
+  localStorage.removeItem(spreadsheetIdKey(uid));
 }
 
 // ── Sheets API helpers ────────────────────────────────────────────────────────
@@ -97,6 +131,29 @@ export async function getOrCreateSpreadsheet(token: string, uid: string): Promis
   return id;
 }
 
+/**
+ * Looks up the spreadsheet ID for this user without creating a new one.
+ * Checks the localStorage cache first, then searches Google Drive.
+ * Returns the ID if found, or null if no matching spreadsheet exists.
+ */
+export async function findSpreadsheetId(token: string, uid: string): Promise<string | null> {
+  const stored = getStoredSpreadsheetId(uid);
+  if (stored) return stored;
+  const existing = await findExistingSpreadsheet(token);
+  if (existing) storeSpreadsheetId(uid, existing);
+  return existing;
+}
+
+/**
+ * Creates a new BudgetApp Data spreadsheet, caches its ID in localStorage,
+ * and returns the ID.
+ */
+export async function createNewSpreadsheet(token: string, uid: string): Promise<string> {
+  const id = await createDataSpreadsheet(token);
+  storeSpreadsheetId(uid, id);
+  return id;
+}
+
 // ── Low-level cell read/write ─────────────────────────────────────────────────
 
 async function readSheetValue<T>(
@@ -108,7 +165,9 @@ async function readSheetValue<T>(
   const url = `${SHEETS_BASE}/${spreadsheetId}/values/${range}`;
   const res = await sheetsRequest('GET', url, token);
   if (!res.ok) {
-    if (res.status === 404) return null;
+    if (res.status === 404) throw new SpreadsheetNotFoundError(spreadsheetId);
+    // HTTP 400 from the values endpoint means the sheet tab does not exist.
+    if (res.status === 400) throw new SheetTabNotFoundError(sheetName);
     throw new Error(`Failed to read sheet "${sheetName}" (HTTP ${res.status}).`);
   }
   const json = (await res.json()) as { values?: string[][] };
@@ -150,13 +209,52 @@ export async function loadAllFromSheets(
   token: string,
   spreadsheetId: string,
 ): Promise<SheetsData> {
-  const [bills, settings, periodOverrides, creditCards] = await Promise.all([
+  const results = await Promise.allSettled([
     readSheetValue<Bill[]>(token, spreadsheetId, SHEET_BILLS),
     readSheetValue<PaySettings>(token, spreadsheetId, SHEET_SETTINGS),
     readSheetValue<PeriodOverrides>(token, spreadsheetId, SHEET_OVERRIDES),
     readSheetValue<CreditCard[]>(token, spreadsheetId, SHEET_CARDS),
   ]);
-  return { bills, settings, periodOverrides, creditCards };
+
+  // Collect missing-tab errors. Any other rejection is re-thrown immediately.
+  const missingTabs: string[] = [];
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      if (result.reason instanceof SheetTabNotFoundError) {
+        missingTabs.push(result.reason.tabName);
+      } else {
+        throw result.reason;
+      }
+    }
+  }
+  if (missingTabs.length > 0) {
+    throw new SheetTabsNotFoundError(missingTabs);
+  }
+
+  const [billsR, settingsR, overridesR, cardsR] = results;
+  return {
+    bills: billsR.status === 'fulfilled' ? billsR.value : null,
+    settings: settingsR.status === 'fulfilled' ? settingsR.value : null,
+    periodOverrides: overridesR.status === 'fulfilled' ? overridesR.value : null,
+    creditCards: cardsR.status === 'fulfilled' ? cardsR.value : null,
+  };
+}
+
+/**
+ * Adds one or more sheet tabs to an existing spreadsheet using the batchUpdate
+ * API. Used to repair a spreadsheet that is missing expected tabs.
+ */
+export async function addSheetTabsToSpreadsheet(
+  token: string,
+  spreadsheetId: string,
+  tabNames: string[],
+): Promise<void> {
+  const requests = tabNames.map((title) => ({ addSheet: { properties: { title } } }));
+  const url = `${SHEETS_BASE}/${spreadsheetId}:batchUpdate`;
+  const res = await sheetsRequest('POST', url, token, { requests });
+  if (!res.ok) {
+    throw new Error(`Failed to add sheet tabs (HTTP ${res.status}).`);
+  }
 }
 
 export async function saveBillsToSheets(
