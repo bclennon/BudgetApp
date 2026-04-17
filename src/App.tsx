@@ -328,7 +328,13 @@ function AppShell() {
         )}
         {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onBankLinked={handleBankLinked} />}
         {tab === 'backup' && (
-          <BackupSyncPage bills={bills} settings={settings} onImport={importData} />
+          <BackupSyncPage
+            bills={bills}
+            settings={settings}
+            creditCards={creditCards}
+            periodOverrides={periodOverrides}
+            onImport={importData}
+          />
         )}
       </main>
     </div>

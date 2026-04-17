@@ -1,15 +1,46 @@
 import { useState } from 'react';
-import type { BackupData, Bill, PaySettings } from '../domain/models';
+import type { BackupData, Bill, CreditCard, PaySettings, PeriodOverrides } from '../domain/models';
+import { generatePayPeriods } from '../domain/payPeriodGenerator';
+import { exportToGoogleSheets } from '../data/googleSheets';
+import { useAuth } from '../auth/AuthContext';
+
+/** Number of upcoming pay periods included in the Google Sheets export. */
+const EXPORT_PERIODS_COUNT = 24;
 
 interface Props {
   bills: Bill[];
   settings: PaySettings | null;
+  creditCards: CreditCard[];
+  periodOverrides: PeriodOverrides;
   onImport: (bills: Bill[], settings: PaySettings | null) => void;
 }
 
-export default function BackupSyncPage({ bills, settings, onImport }: Props) {
+export default function BackupSyncPage({ bills, settings, creditCards, periodOverrides, onImport }: Props) {
+  const { requestSheetsToken } = useAuth();
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  const [sheetsExporting, setSheetsExporting] = useState(false);
+
+  async function handleExportToSheets() {
+    setSheetsExporting(true);
+    setStatus('');
+    setError('');
+    setSheetsUrl('');
+    try {
+      const token = await requestSheetsToken();
+      const periods = settings ? generatePayPeriods(settings, bills, EXPORT_PERIODS_COUNT, periodOverrides) : [];
+      const url = await exportToGoogleSheets(token, { bills, creditCards, periods });
+      setSheetsUrl(url);
+      setStatus('Spreadsheet created successfully.');
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed. Please try again.');
+      setStatus('');
+    } finally {
+      setSheetsExporting(false);
+    }
+  }
 
   function handleExport() {
     const data: BackupData = {
@@ -75,6 +106,24 @@ export default function BackupSyncPage({ bills, settings, onImport }: Props) {
         <button className="btn-primary" onClick={handleExport}>
           💾 Download Backup
         </button>
+      </div>
+
+      <div className="card">
+        <h2 className="card-title">Export to Google Sheets</h2>
+        <p className="card-desc">
+          Export your Pay Periods, Bills, and Credit Cards to a new Google Spreadsheet in your Google Drive.
+          You will be asked to grant access to Google Sheets.
+        </p>
+        <button className="btn-primary" onClick={handleExportToSheets} disabled={sheetsExporting}>
+          {sheetsExporting ? 'Exporting…' : '📊 Export to Google Sheets'}
+        </button>
+        {sheetsUrl && (
+          <p className="card-desc" style={{ marginTop: 10 }}>
+            <a href={sheetsUrl} target="_blank" rel="noopener noreferrer">
+              Open spreadsheet ↗
+            </a>
+          </p>
+        )}
       </div>
 
       <div className="card">
