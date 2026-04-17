@@ -1,5 +1,3 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import type { Bill, CreditCard, PaySettings, PeriodOverrides } from '../domain/models';
 
 const KEY_BILLS = 'budgetapp_bills';
@@ -7,7 +5,7 @@ const KEY_SETTINGS = 'budgetapp_settings';
 const KEY_PERIOD_OVERRIDES = 'budgetapp_period_overrides';
 const KEY_CREDIT_CARDS = 'budgetapp_credit_cards';
 
-// ── localStorage (local cache) ───────────────────────────────────────────────
+// ── localStorage ─────────────────────────────────────────────────────────────
 
 export function loadBills(): Bill[] {
   try {
@@ -63,79 +61,5 @@ export function saveCreditCards(cards: CreditCard[]): void {
 
 export function getNextBillId(bills: Bill[]): number {
   return bills.length === 0 ? 1 : Math.max(...bills.map((b) => b.id)) + 1;
-}
-
-// ── Firestore (cloud storage) ────────────────────────────────────────────────
-
-export async function loadBillsFromCloud(uid: string): Promise<Bill[] | null> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'data', 'bills'));
-    if (!snap.exists()) return null;
-    return (snap.data().bills ?? []) as Bill[];
-  } catch {
-    return null;
-  }
-}
-
-export async function saveBillsToCloud(uid: string, bills: Bill[]): Promise<void> {
-  try {
-    await setDoc(doc(db, 'users', uid, 'data', 'bills'), { bills });
-  } catch (err) {
-    console.error('Failed to save bills to cloud:', err);
-  }
-}
-
-export async function loadSettingsFromCloud(uid: string): Promise<PaySettings | null> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'data', 'settings'));
-    if (!snap.exists()) return null;
-    return (snap.data().settings ?? null) as PaySettings | null;
-  } catch {
-    return null;
-  }
-}
-
-export async function saveSettingsToCloud(uid: string, settings: PaySettings): Promise<void> {
-  try {
-    await setDoc(doc(db, 'users', uid, 'data', 'settings'), { settings });
-  } catch (err) {
-    console.error('Failed to save settings to cloud:', err);
-  }
-}
-
-export async function loadPeriodOverridesFromCloud(uid: string): Promise<PeriodOverrides | null> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'data', 'periodOverrides'));
-    if (!snap.exists()) return null;
-    return (snap.data().overrides ?? {}) as PeriodOverrides;
-  } catch {
-    return null;
-  }
-}
-
-export async function savePeriodOverridesToCloud(uid: string, overrides: PeriodOverrides): Promise<void> {
-  try {
-    await setDoc(doc(db, 'users', uid, 'data', 'periodOverrides'), { overrides });
-  } catch (err) {
-    console.error('Failed to save period overrides to cloud:', err);
-  }
-}
-
-export async function loadCreditCardsFromCloud(uid: string): Promise<CreditCard[] | null> {
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'data', 'creditCards'));
-    if (!snap.exists()) return null;
-    return (snap.data().creditCards ?? []) as CreditCard[];
-  } catch {
-    return null;
-  }
-}
-
-export async function saveCreditCardsToCloud(uid: string, cards: CreditCard[]): Promise<void> {
-  try {
-    await setDoc(doc(db, 'users', uid, 'data', 'creditCards'), { creditCards: cards });
-  } catch (err) {
-    console.error('Failed to save credit cards to cloud:', err);
-  }
 }
 

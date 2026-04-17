@@ -1,14 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Bill, CreditCard, CreditCardPayment, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
 import {
   loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
-  loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
   loadPeriodOverrides, savePeriodOverrides,
-  loadPeriodOverridesFromCloud, savePeriodOverridesToCloud,
   loadCreditCards, saveCreditCards,
-  loadCreditCardsFromCloud, saveCreditCardsToCloud,
 } from './data/storage';
+import {
+  getOrCreateSpreadsheet,
+  loadAllFromSheets,
+  saveBillsToSheets,
+  saveSettingsToSheets,
+  savePeriodOverridesToSheets,
+  saveCreditCardsToSheets,
+} from './data/sheetsStorage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
 import SignInPage from './pages/SignInPage';
@@ -32,52 +37,139 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 const MAX_UNDO = 50;
 
 function AppShell() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, sheetsToken, requestSheetsToken, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>('periods');
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
   const [periodOverrides, setPeriodOverrides] = useState<PeriodOverrides>(() => loadPeriodOverrides());
   const [creditCards, setCreditCards] = useState<CreditCard[]>(() => loadCreditCards());
   const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
-  const [cloudLoaded, setCloudLoaded] = useState(false);
+  /** True once the initial load attempt (from Sheets or localStorage) has completed. */
+  const [dataReady, setDataReady] = useState(false);
+  // Holds the active spreadsheet ID once resolved.
+  const spreadsheetIdRef = useRef<string | null>(null);
 
-  // Load from Firestore when the user signs in.
+  /**
+   * Returns a valid sheets token, requesting a fresh one if needed.
+   * Throws if the token cannot be obtained (e.g. user cancels the OAuth popup).
+   */
+  const getToken = useCallback(async (): Promise<string> => {
+    if (sheetsToken) return sheetsToken;
+    return requestSheetsToken();
+  }, [sheetsToken, requestSheetsToken]);
+
+  /**
+   * Gets a valid token and the spreadsheet ID in a single step, requesting a
+   * new OAuth token if one is not already available. Returns null only if the
+   * user cancels the OAuth popup or the spreadsheet cannot be created.
+   *
+   * Using a single helper avoids calling getToken() twice per save (once inside
+   * resolveSpreadsheetId and once for the write), which would trigger two
+   * separate OAuth popups when the token is stale.
+   */
+  const getSheetContext = useCallback(async (uid: string): Promise<{ token: string; spreadsheetId: string } | null> => {
+    try {
+      const token = await getToken();
+      let spreadsheetId = spreadsheetIdRef.current;
+      if (!spreadsheetId) {
+        spreadsheetId = await getOrCreateSpreadsheet(token, uid);
+        spreadsheetIdRef.current = spreadsheetId;
+      }
+      return { token, spreadsheetId };
+    } catch {
+      return null;
+    }
+  }, [getToken]);
+
+  // Load from Google Sheets when the user signs in and a sheets token is available.
   useEffect(() => {
     if (!user) {
-      setCloudLoaded(false);
+      setDataReady(false);
+      spreadsheetIdRef.current = null;
+      return;
+    }
+    // No sheets token yet — use localStorage data directly (no sync banner).
+    if (!sheetsToken) {
+      setDataReady(true);
       return;
     }
     let cancelled = false;
     const uid = user.uid;
-    async function syncFromCloud() {
-      const [cloudBills, cloudSettings, cloudOverrides, cloudCreditCards] = await Promise.all([
-        loadBillsFromCloud(uid),
-        loadSettingsFromCloud(uid),
-        loadPeriodOverridesFromCloud(uid),
-        loadCreditCardsFromCloud(uid),
-      ]);
-      if (cancelled) return;
-      if (cloudBills !== null) {
-        setBills(cloudBills);
-        saveBills(cloudBills);
+    async function syncFromSheets() {
+      try {
+        const ctx = await getSheetContext(uid);
+        if (!ctx || cancelled) return;
+        const data = await loadAllFromSheets(ctx.token, ctx.spreadsheetId);
+        if (cancelled) return;
+        if (data.bills !== null) {
+          setBills(data.bills);
+          saveBills(data.bills);
+        }
+        if (data.settings !== null) {
+          setSettings(data.settings);
+          saveSettings(data.settings);
+        }
+        if (data.periodOverrides !== null) {
+          setPeriodOverrides(data.periodOverrides);
+          savePeriodOverrides(data.periodOverrides);
+        }
+        if (data.creditCards !== null) {
+          setCreditCards(data.creditCards);
+          saveCreditCards(data.creditCards);
+        }
+      } catch (err) {
+        console.error('Failed to sync from Google Sheets:', err);
+      } finally {
+        if (!cancelled) setDataReady(true);
       }
-      if (cloudSettings !== null) {
-        setSettings(cloudSettings);
-        saveSettings(cloudSettings);
-      }
-      if (cloudOverrides !== null) {
-        setPeriodOverrides(cloudOverrides);
-        savePeriodOverrides(cloudOverrides);
-      }
-      if (cloudCreditCards !== null) {
-        setCreditCards(cloudCreditCards);
-        saveCreditCards(cloudCreditCards);
-      }
-      setCloudLoaded(true);
     }
-    syncFromCloud();
+    syncFromSheets();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, sheetsToken, getSheetContext]);
+
+  async function saveBillsCloud(bills: Bill[]) {
+    if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await saveBillsToSheets(ctx.token, ctx.spreadsheetId, bills);
+    } catch (err) {
+      console.error('Failed to save bills to Google Sheets:', err);
+    }
+  }
+
+  async function saveSettingsCloud(settings: PaySettings) {
+    if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await saveSettingsToSheets(ctx.token, ctx.spreadsheetId, settings);
+    } catch (err) {
+      console.error('Failed to save settings to Google Sheets:', err);
+    }
+  }
+
+  async function saveOverridesCloud(overrides: PeriodOverrides) {
+    if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await savePeriodOverridesToSheets(ctx.token, ctx.spreadsheetId, overrides);
+    } catch (err) {
+      console.error('Failed to save period overrides to Google Sheets:', err);
+    }
+  }
+
+  async function saveCardsCloud(cards: CreditCard[]) {
+    if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await saveCreditCardsToSheets(ctx.token, ctx.spreadsheetId, cards);
+    } catch (err) {
+      console.error('Failed to save credit cards to Google Sheets:', err);
+    }
+  }
 
   function addBill(name: string, dayOfMonth: number, amountCents: number, url: string) {
     const newBill: Bill = { id: getNextBillId(bills), name, dayOfMonth, amountCents };
@@ -85,27 +177,27 @@ function AppShell() {
     const updated = [...bills, newBill];
     setBills(updated);
     saveBills(updated);
-    if (user) saveBillsToCloud(user.uid, updated);
+    saveBillsCloud(updated);
   }
 
   function updateBill(bill: Bill) {
     const updated = bills.map((b) => (b.id === bill.id ? bill : b));
     setBills(updated);
     saveBills(updated);
-    if (user) saveBillsToCloud(user.uid, updated);
+    saveBillsCloud(updated);
   }
 
   function deleteBill(id: number) {
     const updated = bills.filter((b) => b.id !== id);
     setBills(updated);
     saveBills(updated);
-    if (user) saveBillsToCloud(user.uid, updated);
+    saveBillsCloud(updated);
   }
 
   function updateSettings(s: PaySettings) {
     setSettings(s);
     saveSettings(s);
-    if (user) saveSettingsToCloud(user.uid, s);
+    saveSettingsCloud(s);
   }
 
   function addCreditCard(name: string, balanceCents: number, transferExpirationDate: string | undefined) {
@@ -118,21 +210,21 @@ function AppShell() {
     const updated = [...creditCards, newCard];
     setCreditCards(updated);
     saveCreditCards(updated);
-    if (user) saveCreditCardsToCloud(user.uid, updated);
+    saveCardsCloud(updated);
   }
 
   function updateCreditCard(card: CreditCard) {
     const updated = creditCards.map((c) => (c.id === card.id ? card : c));
     setCreditCards(updated);
     saveCreditCards(updated);
-    if (user) saveCreditCardsToCloud(user.uid, updated);
+    saveCardsCloud(updated);
   }
 
   function deleteCreditCard(id: string) {
     const updated = creditCards.filter((c) => c.id !== id);
     setCreditCards(updated);
     saveCreditCards(updated);
-    if (user) saveCreditCardsToCloud(user.uid, updated);
+    saveCardsCloud(updated);
   }
 
   function handleCreditCardPaymentProcessed(_periodStart: string, payments: CreditCardPayment[]) {
@@ -143,7 +235,7 @@ function AppShell() {
     });
     setCreditCards(updated);
     saveCreditCards(updated);
-    if (user) saveCreditCardsToCloud(user.uid, updated);
+    saveCardsCloud(updated);
   }
 
   function handleCreditCardPaymentRestored(_periodStart: string, payments: CreditCardPayment[]) {
@@ -154,7 +246,7 @@ function AppShell() {
     });
     setCreditCards(updated);
     saveCreditCards(updated);
-    if (user) saveCreditCardsToCloud(user.uid, updated);
+    saveCardsCloud(updated);
   }
 
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
@@ -164,17 +256,17 @@ function AppShell() {
     }
     setBills(updated);
     saveBills(updated);
-    if (user) saveBillsToCloud(user.uid, updated);
+    saveBillsCloud(updated);
   }
 
   function importData(newBills: Bill[], newSettings: PaySettings | null) {
     setBills(newBills);
     saveBills(newBills);
-    if (user) saveBillsToCloud(user.uid, newBills);
+    saveBillsCloud(newBills);
     if (newSettings) {
       setSettings(newSettings);
       saveSettings(newSettings);
-      if (user) saveSettingsToCloud(user.uid, newSettings);
+      saveSettingsCloud(newSettings);
     }
   }
 
@@ -183,7 +275,7 @@ function AppShell() {
     setUndoHistory((prev) => [...prev.slice(-(MAX_UNDO - 1)), periodOverrides]);
     setPeriodOverrides(newOverrides);
     savePeriodOverrides(newOverrides);
-    if (user) savePeriodOverridesToCloud(user.uid, newOverrides);
+    saveOverridesCloud(newOverrides);
   }
 
   function updatePeriodOverride(periodStart: string, patch: Partial<PayPeriodOverride>) {
@@ -241,7 +333,7 @@ function AppShell() {
       const newHistory = prev.slice(0, -1);
       setPeriodOverrides(previous);
       savePeriodOverrides(previous);
-      if (user) savePeriodOverridesToCloud(user.uid, previous);
+      saveOverridesCloud(previous);
       return newHistory;
     });
   }
@@ -277,7 +369,7 @@ function AppShell() {
         </button>
       </nav>
 
-      {!cloudLoaded && (
+      {!dataReady && (
         <div className="cloud-loading-bar">Syncing data…</div>
       )}
 
