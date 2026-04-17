@@ -22,6 +22,7 @@ import {
 } from './data/sheetsStorage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
+import { IconThemeProvider, useIconTheme } from './theme/IconThemeContext';
 import SignInPage from './pages/SignInPage';
 import PayPeriodsPage from './pages/PayPeriodsPage';
 import BillsPage from './pages/BillsPage';
@@ -31,12 +32,12 @@ import CreditCardsPage from './pages/CreditCardsPage';
 
 type Tab = 'periods' | 'bills' | 'creditcards' | 'settings' | 'backup';
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'periods', label: 'Pay Periods', icon: '📅' },
-  { id: 'bills', label: 'Bills', icon: '🧾' },
-  { id: 'creditcards', label: 'Credit Cards', icon: '💳' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
-  { id: 'backup', label: 'Backup', icon: '💾' },
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'periods', label: 'Pay Periods' },
+  { id: 'bills', label: 'Bills' },
+  { id: 'creditcards', label: 'Credit Cards' },
+  { id: 'settings', label: 'Settings' },
+  { id: 'backup', label: 'Backup' },
 ];
 
 // Maximum number of undo steps kept in memory per session.
@@ -44,6 +45,7 @@ const MAX_UNDO = 50;
 
 function AppShell() {
   const { user, loading, sheetsToken, requestSheetsToken, signOut } = useAuth();
+  const { iconTheme } = useIconTheme();
   const [tab, setTab] = useState<Tab>('periods');
   const [bills, setBills] = useState<Bill[]>(() => loadBills());
   const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
@@ -466,6 +468,14 @@ function AppShell() {
     return <SignInPage />;
   }
 
+  const TAB_ICONS: Record<string, string> = {
+    periods: iconTheme.icons.periods,
+    bills: iconTheme.icons.bills,
+    creditcards: iconTheme.icons.creditCards,
+    settings: iconTheme.icons.settings,
+    backup: iconTheme.icons.backup,
+  };
+
   return (
     <div className="app">
       <nav className="tab-bar">
@@ -475,12 +485,12 @@ function AppShell() {
             className={`tab-btn${tab === t.id ? ' active' : ''}`}
             onClick={() => setTab(t.id)}
           >
-            <span className="tab-icon">{t.icon}</span>
+            <span className="tab-icon">{TAB_ICONS[t.id]}</span>
             <span className="tab-label">{t.label}</span>
           </button>
         ))}
         <button className="tab-btn" onClick={signOut} title={`Signed in as ${user.displayName ?? user.email}`}>
-          <span className="tab-icon">👤</span>
+          <span className="tab-icon">{iconTheme.icons.signOut}</span>
           <span className="tab-label">Sign Out</span>
         </button>
       </nav>
@@ -602,9 +612,11 @@ function AppShell() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppShell />
-      </AuthProvider>
+      <IconThemeProvider>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
+      </IconThemeProvider>
     </ThemeProvider>
   );
 }

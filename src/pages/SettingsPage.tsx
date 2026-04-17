@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Frequency, PaySettings } from '../domain/models';
 import { useTheme, type Theme } from '../theme/ThemeContext';
+import { useIconTheme, ICON_THEMES, type IconThemeId } from '../theme/IconThemeContext';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: string }[] = [
   { value: 'system', label: 'System', icon: '💻' },
@@ -30,6 +31,7 @@ interface Props {
 
 export default function SettingsPage({ settings, onSave }: Props) {
   const { theme, setTheme } = useTheme();
+  const { iconThemeId, setIconTheme } = useIconTheme();
   const [paycheck, setPaycheck] = useState('');
   const [frequency, setFrequency] = useState<Frequency>('BIWEEKLY');
   const [nextPayday, setNextPayday] = useState('');
@@ -139,6 +141,21 @@ export default function SettingsPage({ settings, onSave }: Props) {
               onClick={() => setTheme(opt.value)}
             >
               <span className="theme-btn-icon">{opt.icon}</span>
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <p className="card-desc" style={{ marginTop: 20 }}>Choose your preferred icon theme.</p>
+        <div className="theme-picker">
+          {ICON_THEMES.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              className={`theme-btn${iconThemeId === opt.id ? ' active' : ''}`}
+              onClick={() => setIconTheme(opt.id as IconThemeId)}
+            >
+              <span className="theme-btn-icon">{opt.preview}</span>
               <span>{opt.label}</span>
             </button>
           ))}
