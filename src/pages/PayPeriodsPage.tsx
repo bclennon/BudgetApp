@@ -102,6 +102,56 @@ function PaycheckEditRow({ currentCents, defaultCents, isOverridden, onSave, onC
   );
 }
 
+// ── Bill amount edit row ───────────────────────────────────────────────────
+
+interface BillAmountEditProps {
+  currentCents: number;
+  defaultCents: number;
+  isOverridden: boolean;
+  onSave: (cents: number | undefined) => void;
+  onCancel: () => void;
+}
+
+function BillAmountEditRow({ currentCents, defaultCents, isOverridden, onSave, onCancel }: BillAmountEditProps) {
+  const [value, setValue] = useState(dollarsToStr(currentCents));
+  const [error, setError] = useState('');
+
+  function handleSave() {
+    const cents = parseCents(value);
+    if (cents === null) { setError('Enter a valid amount.'); return; }
+    onSave(cents);
+  }
+
+  function handleReset() {
+    onSave(undefined); // clear override
+  }
+
+  return (
+    <tr className="row-bill-amount-edit">
+      <td colSpan={2}>
+        <div className="period-inline-form">
+          {error && <span className="inline-error">{error}</span>}
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="inline-input"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel(); }}
+          />
+          <button className="btn-xs btn-primary-xs" onClick={handleSave}>Save</button>
+          {isOverridden && (
+            <button className="btn-xs" onClick={handleReset} title={`Reset to ${formatCents(defaultCents)}`}>Reset</button>
+          )}
+          <button className="btn-xs" onClick={onCancel}>✕</button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ── Move bill row ──────────────────────────────────────────────────────────
 
 interface MoveSelectorProps {
@@ -280,6 +330,7 @@ function PeriodCard({
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
   const [addingOneTime, setAddingOneTime] = useState(false);
+  const [editingBillKey, setEditingBillKey] = useState<string | null>(null);
 
   const isPaycheckOverridden = override.paycheckAmountCents !== undefined;
 
@@ -301,6 +352,18 @@ function PeriodCard({
 
   function handleDeleteOneTime(id: string) {
     onUpdateOverride({ oneTimeBills: override.oneTimeBills.filter((b) => b.id !== id) });
+  }
+
+  function handleSaveBillAmount(key: string, cents: number | undefined) {
+    const current = override.billAmountOverrides ?? {};
+    if (cents === undefined) {
+      const updated = { ...current };
+      delete updated[key];
+      onUpdateOverride({ billAmountOverrides: Object.keys(updated).length > 0 ? updated : undefined });
+    } else {
+      onUpdateOverride({ billAmountOverrides: { ...current, [key]: cents } });
+    }
+    setEditingBillKey(null);
   }
 
   function handleTogglePaymentStatus(billKey: string) {
@@ -371,7 +434,7 @@ function PeriodCard({
   const billStatuses = override.billPaymentStatuses ?? {};
   const unprocessedBillsCents = period.bills.reduce((sum, bip) => {
     const key = bip.isOneTime ? bip.oneTimeBillId! : billKey(bip.bill.id);
-    return billStatuses[key] === 'processed' ? sum : sum + bip.bill.amountCents;
+    return billStatuses[key] === 'processed' ? sum : sum + (bip.amountOverrideCents ?? bip.bill.amountCents);
   }, 0);
   const totalUnprocessedCents = unprocessedBillsCents + unprocessedCcCents;
 
@@ -481,17 +544,20 @@ function PeriodCard({
           )}
 
           {/* ── Regular recurring bills ── */}
-          {regularBills.map(({ bill, dueDate }) => {
+          {regularBills.map(({ bill, dueDate, amountOverrideCents }) => {
             const key = billKey(bill.id);
             const status = (override.billPaymentStatuses ?? {})[key];
+            const isAmountOverridden = amountOverrideCents !== undefined;
+            const effectiveAmount = amountOverrideCents ?? bill.amountCents;
             return (
               <tr key={`r-${bill.id}`} className={`row-bill${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
                   {(() => { const href = safeBillUrl(bill.url); return href ? (<a href={href} target="_blank" rel="noopener noreferrer">{bill.name}</a>) : bill.name; })()}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
+                  {isAmountOverridden && <span className="override-tag"> (overridden)</span>}
                 </td>
                 <td className="amount neg">
-                  -{formatCents(bill.amountCents)}
+                  -{formatCents(effectiveAmount)}
                   <button
                     className={paymentStatusClassName(status)}
                     onClick={() => handleTogglePaymentStatus(key)}
@@ -499,6 +565,14 @@ function PeriodCard({
                     title={paymentStatusTitle(status)}
                   >
                     {paymentStatusIcon(status)}
+                  </button>
+                  <button
+                    className="btn-xs btn-inline"
+                    onClick={() => setEditingBillKey(editingBillKey === key ? null : key)}
+                    aria-label="Edit bill amount for this period"
+                    title="Override amount for this period"
+                  >
+                    ✏️
                   </button>
                   <button
                     className="btn-xs btn-inline"
@@ -512,6 +586,19 @@ function PeriodCard({
               </tr>
             );
           })}
+          {editingBillKey !== null && regularBills.some((b) => billKey(b.bill.id) === editingBillKey) && (() => {
+            const editing = regularBills.find((b) => billKey(b.bill.id) === editingBillKey)!;
+            return (
+              <BillAmountEditRow
+                key={`amount-edit-${editingBillKey}`}
+                currentCents={editing.amountOverrideCents ?? editing.bill.amountCents}
+                defaultCents={editing.bill.amountCents}
+                isOverridden={editing.amountOverrideCents !== undefined}
+                onSave={(cents) => handleSaveBillAmount(editingBillKey, cents)}
+                onCancel={() => setEditingBillKey(null)}
+              />
+            );
+          })()}
           {movingBillId !== null && regularBills.some((b) => b.bill.id === movingBillId) && (() => {
             const moving = regularBills.find((b) => b.bill.id === movingBillId)!;
             return (
@@ -527,18 +614,21 @@ function PeriodCard({
           })()}
 
           {/* ── Bills moved in from other periods ── */}
-          {movedInBills.map(({ bill, dueDate, movedFromPeriod }, idx) => {
+          {movedInBills.map(({ bill, dueDate, movedFromPeriod, amountOverrideCents }, idx) => {
             const key = billKey(bill.id);
             const status = (override.billPaymentStatuses ?? {})[key];
+            const isAmountOverridden = amountOverrideCents !== undefined;
+            const effectiveAmount = amountOverrideCents ?? bill.amountCents;
             return (
               <tr key={`mv-${bill.id}-${movedFromPeriod}-${idx}`} className={`row-bill row-moved${status === 'processed' ? ' row-bill-processed' : status === 'submitted' ? ' row-bill-submitted' : ''}`}>
                 <td>
                   {(() => { const href = safeBillUrl(bill.url); return href ? (<a href={href} target="_blank" rel="noopener noreferrer">{bill.name}</a>) : bill.name; })()}
                   <span className="due-date"> (due {formatDate(dueDate)})</span>
                   <span className="moved-tag"> ↔ moved</span>
+                  {isAmountOverridden && <span className="override-tag"> (overridden)</span>}
                 </td>
                 <td className="amount neg">
-                  -{formatCents(bill.amountCents)}
+                  -{formatCents(effectiveAmount)}
                   <button
                     className={paymentStatusClassName(status)}
                     onClick={() => handleTogglePaymentStatus(key)}
@@ -546,6 +636,14 @@ function PeriodCard({
                     title={paymentStatusTitle(status)}
                   >
                     {paymentStatusIcon(status)}
+                  </button>
+                  <button
+                    className="btn-xs btn-inline"
+                    onClick={() => setEditingBillKey(editingBillKey === key ? null : key)}
+                    aria-label="Edit bill amount for this period"
+                    title="Override amount for this period"
+                  >
+                    ✏️
                   </button>
                   <button
                     className="btn-xs btn-inline btn-danger-xs"
@@ -559,6 +657,19 @@ function PeriodCard({
               </tr>
             );
           })}
+          {editingBillKey !== null && movedInBills.some((b) => billKey(b.bill.id) === editingBillKey) && (() => {
+            const editing = movedInBills.find((b) => billKey(b.bill.id) === editingBillKey)!;
+            return (
+              <BillAmountEditRow
+                key={`amount-edit-mv-${editingBillKey}`}
+                currentCents={editing.amountOverrideCents ?? editing.bill.amountCents}
+                defaultCents={editing.bill.amountCents}
+                isOverridden={editing.amountOverrideCents !== undefined}
+                onSave={(cents) => handleSaveBillAmount(editingBillKey, cents)}
+                onCancel={() => setEditingBillKey(null)}
+              />
+            );
+          })()}
 
           {/* ── One-time bills ── */}
           {oneTimeBills.map(({ bill, dueDate, oneTimeBillId }) => {
@@ -582,6 +693,14 @@ function PeriodCard({
                     {paymentStatusIcon(status)}
                   </button>
                   <button
+                    className="btn-xs btn-inline"
+                    onClick={() => setEditingBillKey(editingBillKey === key ? null : key)}
+                    aria-label="Edit bill amount for this period"
+                    title="Override amount for this period"
+                  >
+                    ✏️
+                  </button>
+                  <button
                     className="btn-xs btn-inline btn-danger-xs"
                     onClick={() => handleDeleteOneTime(oneTimeBillId!)}
                     aria-label="Delete one-time bill"
@@ -593,6 +712,30 @@ function PeriodCard({
               </tr>
             );
           })}
+          {/* One-time bills are period-specific entries, so editing updates their amount directly
+              rather than through billAmountOverrides. There is no original "bill amount" to reset to. */}
+          {editingBillKey !== null && oneTimeBills.some((b) => b.oneTimeBillId === editingBillKey) && (() => {
+            const editing = oneTimeBills.find((b) => b.oneTimeBillId === editingBillKey)!;
+            return (
+              <BillAmountEditRow
+                key={`amount-edit-ot-${editingBillKey}`}
+                currentCents={editing.bill.amountCents}
+                defaultCents={editing.bill.amountCents}
+                isOverridden={false}
+                onSave={(cents) => {
+                  if (cents !== undefined) {
+                    onUpdateOverride({
+                      oneTimeBills: override.oneTimeBills.map((b) =>
+                        b.id === editingBillKey ? { ...b, amountCents: cents } : b
+                      ),
+                    });
+                  }
+                  setEditingBillKey(null);
+                }}
+                onCancel={() => setEditingBillKey(null)}
+              />
+            );
+          })()}
 
           {/* ── Add one-time bill ── */}
           {!addingOneTime ? (

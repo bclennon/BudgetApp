@@ -46,6 +46,8 @@ export interface PayPeriodOverride {
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
   /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
   billPaymentStatuses: Record<string, BillPaymentStatus>;
+  /** Map of bill key → per-period amount override in cents. Key: String(bill.id) for recurring/moved bills. Does not affect the bill's stored amount. */
+  billAmountOverrides?: Record<string, number>;
   /**
    * Per-card payment statuses for this period (key = card.id).
    * When present, each card's status is tracked independently.
@@ -119,6 +121,7 @@ export interface BillInPeriod {
   isOneTime?: boolean;       // true if manually added as a one-time bill
   oneTimeBillId?: string;    // OneTimeBill.id when isOneTime is true
   movedFromPeriod?: string;  // source period startDate when moved in
+  amountOverrideCents?: number; // per-period amount override (recurring/moved bills only); does not change bill.amountCents
 }
 
 export interface PayPeriod {
