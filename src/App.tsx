@@ -81,6 +81,8 @@ function AppShell() {
         spreadsheetIdPromiseRef.current = getOrCreateSpreadsheet(token, uid).then((id) => {
           spreadsheetIdRef.current = id;
           return id;
+        }).finally(() => {
+          spreadsheetIdPromiseRef.current = null;
         });
       }
       const spreadsheetId = await spreadsheetIdPromiseRef.current;
