@@ -48,6 +48,8 @@ function AppShell() {
   const [dataReady, setDataReady] = useState(false);
   // Holds the active spreadsheet ID once resolved.
   const spreadsheetIdRef = useRef<string | null>(null);
+  // Deduplicates concurrent getOrCreateSpreadsheet calls to prevent race-condition duplicates.
+  const spreadsheetIdPromiseRef = useRef<Promise<string> | null>(null);
 
   /**
    * Returns a valid sheets token, requesting a fresh one if needed.
@@ -70,11 +72,18 @@ function AppShell() {
   const getSheetContext = useCallback(async (uid: string): Promise<{ token: string; spreadsheetId: string } | null> => {
     try {
       const token = await getToken();
-      let spreadsheetId = spreadsheetIdRef.current;
-      if (!spreadsheetId) {
-        spreadsheetId = await getOrCreateSpreadsheet(token, uid);
-        spreadsheetIdRef.current = spreadsheetId;
+      if (spreadsheetIdRef.current) {
+        return { token, spreadsheetId: spreadsheetIdRef.current };
       }
+      // If a lookup/create is already in flight, wait for it instead of
+      // launching a second one (which would create a duplicate spreadsheet).
+      if (!spreadsheetIdPromiseRef.current) {
+        spreadsheetIdPromiseRef.current = getOrCreateSpreadsheet(token, uid).then((id) => {
+          spreadsheetIdRef.current = id;
+          return id;
+        });
+      }
+      const spreadsheetId = await spreadsheetIdPromiseRef.current;
       return { token, spreadsheetId };
     } catch {
       return null;
@@ -86,6 +95,7 @@ function AppShell() {
     if (!user) {
       setDataReady(false);
       spreadsheetIdRef.current = null;
+      spreadsheetIdPromiseRef.current = null;
       return;
     }
     // No sheets token yet — use localStorage data directly (no sync banner).
