@@ -45,7 +45,13 @@ export interface PayPeriodOverride {
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
   /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
   billPaymentStatuses: Record<string, BillPaymentStatus>;
-  /** Tracks the payment status of the credit-card debt payment(s) for this period. */
+  /**
+   * Per-card payment statuses for this period (key = card.id).
+   * When present, each card's status is tracked independently.
+   * When absent, falls back to the legacy `creditCardPaymentStatus` field.
+   */
+  creditCardPaymentStatuses?: Record<string, BillPaymentStatus>;
+  /** @deprecated Use creditCardPaymentStatuses instead. Kept for backward compatibility. */
   creditCardPaymentStatus?: BillPaymentStatus;
   /**
    * Payments to one or more credit cards for this period (set when processed).
