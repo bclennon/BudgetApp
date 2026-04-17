@@ -17,6 +17,26 @@ export class SpreadsheetNotFoundError extends Error {
   }
 }
 
+/** Thrown when a specific sheet tab does not exist within the spreadsheet. */
+export class SheetTabNotFoundError extends Error {
+  readonly tabName: string;
+  constructor(tabName: string) {
+    super(`Sheet tab "${tabName}" not found in spreadsheet.`);
+    this.name = 'SheetTabNotFoundError';
+    this.tabName = tabName;
+  }
+}
+
+/** Thrown by {@link loadAllFromSheets} when one or more expected sheet tabs are missing. */
+export class SheetTabsNotFoundError extends Error {
+  readonly missingTabs: string[];
+  constructor(missingTabs: string[]) {
+    super(`Missing sheet tabs: ${missingTabs.join(', ')}`);
+    this.name = 'SheetTabsNotFoundError';
+    this.missingTabs = missingTabs;
+  }
+}
+
 const SPREADSHEET_TITLE = 'BudgetApp Data';
 
 // ── Spreadsheet ID persistence ────────────────────────────────────────────────
@@ -123,6 +143,8 @@ async function readSheetValue<T>(
   const res = await sheetsRequest('GET', url, token);
   if (!res.ok) {
     if (res.status === 404) throw new SpreadsheetNotFoundError(spreadsheetId);
+    // HTTP 400 from the values endpoint means the sheet tab does not exist.
+    if (res.status === 400) throw new SheetTabNotFoundError(sheetName);
     throw new Error(`Failed to read sheet "${sheetName}" (HTTP ${res.status}).`);
   }
   const json = (await res.json()) as { values?: string[][] };
@@ -164,13 +186,52 @@ export async function loadAllFromSheets(
   token: string,
   spreadsheetId: string,
 ): Promise<SheetsData> {
-  const [bills, settings, periodOverrides, creditCards] = await Promise.all([
+  const results = await Promise.allSettled([
     readSheetValue<Bill[]>(token, spreadsheetId, SHEET_BILLS),
     readSheetValue<PaySettings>(token, spreadsheetId, SHEET_SETTINGS),
     readSheetValue<PeriodOverrides>(token, spreadsheetId, SHEET_OVERRIDES),
     readSheetValue<CreditCard[]>(token, spreadsheetId, SHEET_CARDS),
   ]);
-  return { bills, settings, periodOverrides, creditCards };
+
+  // Collect missing-tab errors. Any other rejection is re-thrown immediately.
+  const missingTabs: string[] = [];
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      if (result.reason instanceof SheetTabNotFoundError) {
+        missingTabs.push(result.reason.tabName);
+      } else {
+        throw result.reason;
+      }
+    }
+  }
+  if (missingTabs.length > 0) {
+    throw new SheetTabsNotFoundError(missingTabs);
+  }
+
+  const [billsR, settingsR, overridesR, cardsR] = results;
+  return {
+    bills: billsR.status === 'fulfilled' ? billsR.value : null,
+    settings: settingsR.status === 'fulfilled' ? settingsR.value : null,
+    periodOverrides: overridesR.status === 'fulfilled' ? overridesR.value : null,
+    creditCards: cardsR.status === 'fulfilled' ? cardsR.value : null,
+  };
+}
+
+/**
+ * Adds one or more sheet tabs to an existing spreadsheet using the batchUpdate
+ * API. Used to repair a spreadsheet that is missing expected tabs.
+ */
+export async function addSheetTabsToSpreadsheet(
+  token: string,
+  spreadsheetId: string,
+  tabNames: string[],
+): Promise<void> {
+  const requests = tabNames.map((title) => ({ addSheet: { properties: { title } } }));
+  const url = `${SHEETS_BASE}/${spreadsheetId}:batchUpdate`;
+  const res = await sheetsRequest('POST', url, token, { requests });
+  if (!res.ok) {
+    throw new Error(`Failed to add sheet tabs (HTTP ${res.status}).`);
+  }
 }
 
 export async function saveBillsToSheets(

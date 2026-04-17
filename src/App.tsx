@@ -14,7 +14,9 @@ import {
   savePeriodOverridesToSheets,
   saveCreditCardsToSheets,
   clearStoredSpreadsheetId,
+  addSheetTabsToSpreadsheet,
   SpreadsheetNotFoundError,
+  SheetTabsNotFoundError,
 } from './data/sheetsStorage';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -52,6 +54,10 @@ function AppShell() {
   const [cloudSaveError, setCloudSaveError] = useState<string | null>(null);
   /** True when the stored spreadsheet ID is stale (spreadsheet was deleted). */
   const [spreadsheetNotFound, setSpreadsheetNotFound] = useState(false);
+  /** Non-null when expected sheet tabs are missing; holds the list of missing tab names. */
+  const [missingSheetTabs, setMissingSheetTabs] = useState<string[] | null>(null);
+  /** Incrementing this causes the Sheets sync useEffect to re-run (e.g. after repairing missing tabs). */
+  const [syncKey, setSyncKey] = useState(0);
   // Holds the active spreadsheet ID once resolved.
   const spreadsheetIdRef = useRef<string | null>(null);
   // Deduplicates concurrent getOrCreateSpreadsheet calls to prevent race-condition duplicates.
@@ -143,6 +149,8 @@ function AppShell() {
             spreadsheetIdPromiseRef.current = null;
             setSpreadsheetNotFound(true);
           }
+        } else if (err instanceof SheetTabsNotFoundError) {
+          if (!cancelled) setMissingSheetTabs(err.missingTabs);
         } else {
           console.error('Failed to sync from Google Sheets:', err);
         }
@@ -152,7 +160,7 @@ function AppShell() {
     }
     syncFromSheets();
     return () => { cancelled = true; };
-  }, [user, sheetsToken, getSheetContext]);
+  }, [user, sheetsToken, getSheetContext, syncKey]);
 
   async function saveBillsCloud(bills: Bill[]) {
     if (!user) return;
@@ -216,6 +224,24 @@ function AppShell() {
     const anyFailed = results.some((r) => r.status === 'rejected');
     if (anyFailed) {
       setCloudSaveError('Some data could not be saved to the new Google Sheets file. Your changes are saved locally.');
+    }
+  }
+
+  /** Called when the user wants to add the missing sheet tabs back to the existing spreadsheet. */
+  async function handleAddMissingSheetTabs() {
+    if (!user || !missingSheetTabs) return;
+    const tabs = missingSheetTabs;
+    setMissingSheetTabs(null);
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
+    try {
+      await addSheetTabsToSpreadsheet(ctx.token, ctx.spreadsheetId, tabs);
+      // Re-trigger the sync so the newly created tabs are loaded.
+      setDataReady(false);
+      setSyncKey((k) => k + 1);
+    } catch (err) {
+      console.error('Failed to add missing sheet tabs:', err);
+      setCloudSaveError('Could not add the missing sheet tabs. Please try again.');
     }
   }
 
@@ -441,6 +467,27 @@ function AppShell() {
                 Create New Spreadsheet
               </button>
               <button className="btn-secondary" onClick={() => setSpreadsheetNotFound(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {missingSheetTabs && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <h2 className="modal-title">⚠️ Missing Sheet Tabs</h2>
+            <p className="modal-body">
+              The following tabs were not found in your Google Sheets data file:{' '}
+              <strong>{missingSheetTabs.join(', ')}</strong>.
+              They may have been renamed or deleted. Would you like to add them back?
+            </p>
+            <div className="modal-actions">
+              <button className="btn-primary" onClick={handleAddMissingSheetTabs}>
+                Add Missing Tabs
+              </button>
+              <button className="btn-secondary" onClick={() => setMissingSheetTabs(null)}>
                 Cancel
               </button>
             </div>
