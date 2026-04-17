@@ -1,6 +1,4 @@
 import { useState, useMemo } from 'react';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../firebase';
 import type { Bill, CreditCard, CreditCardPayment, PayPeriod, PaySettings, PeriodOverrides, PayPeriodOverride, BillPaymentStatus } from '../domain/models';
 import { emptyOverride, getPlannedCardPayments } from '../domain/models';
 import { generatePayPeriods, daysBetween } from '../domain/payPeriodGenerator';
@@ -246,13 +244,11 @@ interface PeriodCardProps {
   allPeriods: PayPeriod[];
   override: PayPeriodOverride;
   defaultPaycheckCents: number;
-  bankLinked: boolean;
   creditCards: CreditCard[];
   today: string;
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
-  onBankUnlinked: () => void;
   onCreditCardPaymentProcessed: (payments: CreditCardPayment[]) => void;
   onCreditCardPaymentRestored: (payments: CreditCardPayment[]) => void;
 }
@@ -262,21 +258,17 @@ function PeriodCard({
   allPeriods,
   override,
   defaultPaycheckCents,
-  bankLinked,
   creditCards,
   today,
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
-  onBankUnlinked,
   onCreditCardPaymentProcessed,
   onCreditCardPaymentRestored,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
   const [addingOneTime, setAddingOneTime] = useState(false);
-  const [fetchingBalance, setFetchingBalance] = useState(false);
-  const [balanceError, setBalanceError] = useState('');
 
   const isPaycheckOverridden = override.paycheckAmountCents !== undefined;
 
@@ -298,29 +290,6 @@ function PeriodCard({
 
   function handleDeleteOneTime(id: string) {
     onUpdateOverride({ oneTimeBills: override.oneTimeBills.filter((b) => b.id !== id) });
-  }
-
-  async function handleUseCheckingBalance() {
-    setBalanceError('');
-    setFetchingBalance(true);
-    try {
-      const getCheckingBalance = httpsCallable<Record<never, never>, { balanceCents: number }>(
-        functions,
-        'getCheckingBalance'
-      );
-      const result = await getCheckingBalance({});
-      onUpdateOverride({ paycheckAmountCents: result.data.balanceCents });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to fetch balance.';
-      setBalanceError(msg);
-      // If the token no longer exists in Firestore, reset the linked status so
-      // the user is prompted to re-link in Settings.
-      if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'functions/not-found') {
-        onBankUnlinked();
-      }
-    } finally {
-      setFetchingBalance(false);
-    }
   }
 
   function handleTogglePaymentStatus(billKey: string) {
@@ -449,26 +418,8 @@ function PeriodCard({
               >
                 ✏️
               </button>
-              {bankLinked && (
-                <button
-                  className="btn-xs btn-inline"
-                  onClick={handleUseCheckingBalance}
-                  disabled={fetchingBalance}
-                  aria-label="Use checking account balance as paycheck"
-                  title="Set paycheck to current checking account balance"
-                >
-                  {fetchingBalance ? '…' : '🏦'}
-                </button>
-              )}
             </td>
           </tr>
-          {balanceError && (
-            <tr className="row-balance-error">
-              <td colSpan={2}>
-                <span className="inline-error">{balanceError}</span>
-              </td>
-            </tr>
-          )}
           {editingPaycheck && (
             <PaycheckEditRow
               currentCents={period.paycheckAmountCents}
@@ -679,14 +630,12 @@ interface Props {
   bills: Bill[];
   settings: PaySettings | null;
   overrides: PeriodOverrides;
-  bankLinked: boolean;
   creditCards: CreditCard[];
   onUpdatePeriodOverride: (periodStart: string, patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string, toPeriodStart: string) => void;
   onUndo: () => void;
   canUndo: boolean;
-  onBankUnlinked: () => void;
   onCreditCardPaymentProcessed: (periodStart: string, payments: CreditCardPayment[]) => void;
   onCreditCardPaymentRestored: (periodStart: string, payments: CreditCardPayment[]) => void;
 }
@@ -695,14 +644,12 @@ export default function PayPeriodsPage({
   bills,
   settings,
   overrides,
-  bankLinked,
   creditCards,
   onUpdatePeriodOverride,
   onMoveBill,
   onUnmoveBill,
   onUndo,
   canUndo,
-  onBankUnlinked,
   onCreditCardPaymentProcessed,
   onCreditCardPaymentRestored,
 }: Props) {
@@ -772,14 +719,12 @@ export default function PayPeriodsPage({
             creditCards={adjustedCards}
             today={today}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(period.startDate, patch)}
-            bankLinked={bankLinked}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, period.startDate, toPeriodStart, toDueDate)
             }
             onUnmoveBill={(billId, fromPeriodStart) =>
               onUnmoveBill(billId, fromPeriodStart, period.startDate)
             }
-            onBankUnlinked={onBankUnlinked}
             onCreditCardPaymentProcessed={(payments) =>
               onCreditCardPaymentProcessed(period.startDate, payments)
             }

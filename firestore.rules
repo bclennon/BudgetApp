@@ -1,13 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Sophtron user institution IDs must never be readable or writable from the
-    // client. They are written and read exclusively by Cloud Functions via the
-    // Admin SDK.
-    match /users/{userId}/sophtron/{document=**} {
-      allow read, write: if false;
-    }
-
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }

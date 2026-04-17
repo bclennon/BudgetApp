@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Bill, CreditCard, CreditCardPayment, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
-import { generatePayPeriods } from './domain/payPeriodGenerator';
 import {
   loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
   loadBillsFromCloud, saveBillsToCloud, loadSettingsFromCloud, saveSettingsToCloud,
@@ -156,24 +155,6 @@ function AppShell() {
     if (user) saveCreditCardsToCloud(user.uid, updated);
   }
 
-  function handleBankLinked(balanceCents?: number) {
-    if (!settings) return;
-    updateSettings({ ...settings, bankLinked: true });
-    if (balanceCents !== undefined) {
-      const today = new Date().toISOString().slice(0, 10);
-      const periods = generatePayPeriods(settings, bills);
-      const currentPeriod = periods.find((p) => p.startDate <= today && today <= p.endDate);
-      if (currentPeriod) {
-        updatePeriodOverride(currentPeriod.startDate, { paycheckAmountCents: balanceCents });
-      }
-    }
-  }
-
-  function handleBankUnlinked() {
-    if (!settings) return;
-    updateSettings({ ...settings, bankLinked: false });
-  }
-
   function importBills(items: { name: string; dayOfMonth: number; amountCents: number }[]) {
     const updated = [...bills];
     for (const item of items) {
@@ -303,14 +284,12 @@ function AppShell() {
             bills={bills}
             settings={settings}
             overrides={periodOverrides}
-            bankLinked={settings?.bankLinked ?? false}
             creditCards={creditCards}
             onUpdatePeriodOverride={updatePeriodOverride}
             onMoveBill={moveBill}
             onUnmoveBill={unmoveBill}
             onUndo={undo}
             canUndo={undoHistory.length > 0}
-            onBankUnlinked={handleBankUnlinked}
             onCreditCardPaymentProcessed={handleCreditCardPaymentProcessed}
             onCreditCardPaymentRestored={handleCreditCardPaymentRestored}
           />
@@ -326,7 +305,7 @@ function AppShell() {
             onDelete={deleteCreditCard}
           />
         )}
-        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} onBankLinked={handleBankLinked} />}
+        {tab === 'settings' && <SettingsPage settings={settings} onSave={updateSettings} />}
         {tab === 'backup' && (
           <BackupSyncPage
             bills={bills}
