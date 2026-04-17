@@ -140,4 +140,54 @@ describe('generatePayPeriods', () => {
     expect(periods[0].surplusCents).toBe(0);
     expect(periods[0].displayedSpendingPerDay).toBe(periods[0].spendingPerDayRaw);
   });
+
+  it('bill amount override replaces original amount in billsTotalCents', () => {
+    const bills: Bill[] = [
+      { id: 1, name: 'Rent', dayOfMonth: 5, amountCents: 100000 },
+      { id: 2, name: 'Electric', dayOfMonth: 10, amountCents: 5000 },
+    ];
+    const settings = makeSettings('2024-01-01', 'MONTHLY', 200000);
+    const overrides: PeriodOverrides = {
+      '2024-01-01': {
+        oneTimeBills: [],
+        movedInBills: [],
+        movedOutBillIds: [],
+        billPaymentStatuses: {},
+        billAmountOverrides: { '1': 90000 }, // Rent overridden from $1000 to $900
+      },
+    };
+    const periods = generatePayPeriods(settings, bills, 1, overrides);
+    // billsTotalCents = 90000 (Rent override) + 5000 (Electric) = 95000
+    expect(periods[0].billsTotalCents).toBe(95000);
+    expect(periods[0].remainingCents).toBe(200000 - 95000);
+    // amountOverrideCents is set on the overridden bill
+    const rentBip = periods[0].bills.find((b) => b.bill.id === 1)!;
+    expect(rentBip.amountOverrideCents).toBe(90000);
+    expect(rentBip.bill.amountCents).toBe(100000); // original unchanged
+    // Electric has no override
+    const elecBip = periods[0].bills.find((b) => b.bill.id === 2)!;
+    expect(elecBip.amountOverrideCents).toBeUndefined();
+  });
+
+  it('bill amount override does not affect other periods', () => {
+    const bills: Bill[] = [
+      { id: 1, name: 'Rent', dayOfMonth: 5, amountCents: 100000 },
+    ];
+    const settings = makeSettings('2024-01-01', 'MONTHLY', 200000);
+    const overrides: PeriodOverrides = {
+      '2024-01-01': {
+        oneTimeBills: [],
+        movedInBills: [],
+        movedOutBillIds: [],
+        billPaymentStatuses: {},
+        billAmountOverrides: { '1': 90000 },
+      },
+    };
+    const periods = generatePayPeriods(settings, bills, 2, overrides);
+    // First period uses override
+    expect(periods[0].billsTotalCents).toBe(90000);
+    // Second period uses original amount
+    expect(periods[1].billsTotalCents).toBe(100000);
+    expect(periods[1].bills[0].amountOverrideCents).toBeUndefined();
+  });
 });

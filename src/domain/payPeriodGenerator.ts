@@ -68,6 +68,7 @@ export function generatePayPeriods(
     const override = overrides[currentStart];
     const effectivePaycheckCents = override?.paycheckAmountCents ?? settings.paycheckAmountCents;
     const movedOutIds = new Set(override?.movedOutBillIds ?? []);
+    const amountOverrides = override?.billAmountOverrides ?? {};
 
     const startParts = parseDate(currentStart);
     const endParts = parseDate(currentEnd);
@@ -86,7 +87,8 @@ export function generatePayPeriods(
       for (const { year, month } of monthsToCheck) {
         const dueDate = resolveDueDate(year, month, bill.dayOfMonth);
         if (dueDate >= currentStart && dueDate <= currentEnd) {
-          billsInPeriod.push({ bill, dueDate });
+          const key = String(bill.id);
+          billsInPeriod.push({ bill, dueDate, amountOverrideCents: amountOverrides[key] });
           break;
         }
       }
@@ -97,10 +99,12 @@ export function generatePayPeriods(
     for (const moved of override?.movedInBills ?? []) {
       const bill = billMap.get(moved.billId);
       if (bill) {
+        const key = String(bill.id);
         billsInPeriod.push({
           bill,
           dueDate: moved.dueDate,
           movedFromPeriod: moved.fromPeriodStart,
+          amountOverrideCents: amountOverrides[key],
         });
       }
     }
@@ -122,7 +126,7 @@ export function generatePayPeriods(
     const billsTotalCents = billsInPeriod.reduce((sum, b) => {
       const key = b.isOneTime ? b.oneTimeBillId! : String(b.bill.id);
       if (billPaymentStatuses[key] === 'processed') return sum;
-      return sum + b.bill.amountCents;
+      return sum + (b.amountOverrideCents ?? b.bill.amountCents);
     }, 0);
     const remainingCents = effectivePaycheckCents - billsTotalCents;
     const spendingPerDayRaw = daysInPeriod > 0 ? Math.trunc(remainingCents / daysInPeriod) : 0;
