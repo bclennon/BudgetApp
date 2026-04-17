@@ -23,6 +23,9 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+// drive.file is required to search Google Drive for an existing BudgetApp spreadsheet
+// so that we can return it instead of creating a duplicate on each new device/session.
+const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -40,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithGoogle() {
     const provider = new GoogleAuthProvider();
     provider.addScope(SHEETS_SCOPE);
+    provider.addScope(DRIVE_FILE_SCOPE);
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
@@ -55,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function requestSheetsToken(): Promise<string> {
     const provider = new GoogleAuthProvider();
     provider.addScope(SHEETS_SCOPE);
+    provider.addScope(DRIVE_FILE_SCOPE);
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
