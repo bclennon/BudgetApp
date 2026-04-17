@@ -380,8 +380,9 @@ function PeriodCard({
       : {};
     if (!override.creditCardPaymentStatuses && override.creditCardPaymentStatus) {
       const legacyStatus = override.creditCardPaymentStatus;
-      for (const [id] of storedPaymentsMap) {
-        baseStatuses[id] = legacyStatus;
+      // Seed all cards that have a payment in this period (planned or stored).
+      for (const { card } of displayPayments) {
+        baseStatuses[card.id] = legacyStatus;
       }
     }
 
