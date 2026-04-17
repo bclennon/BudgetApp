@@ -579,8 +579,8 @@ function PeriodCard({
               </td>
               <td className="amount neg">
                 -{formatCents(amountCents)}
-                {/* Show the status toggle only on the first row */}
-                {idx === 0 && (
+                {/* Show the status toggle only on the last row */}
+                {idx === displayPayments.length - 1 && (
                   <button
                     className={paymentStatusClassName(override.creditCardPaymentStatus)}
                     onClick={handleToggleCreditCardPaymentStatus}
