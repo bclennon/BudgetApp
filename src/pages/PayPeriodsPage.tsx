@@ -566,7 +566,7 @@ function PeriodCard({
           )}
 
           {/* ── Credit card payment(s) ── */}
-          {displayPayments.map(({ card, amountCents }, idx) => (
+          {displayPayments.map(({ card, amountCents }) => (
             <tr
               key={card.id}
               className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}
@@ -579,17 +579,14 @@ function PeriodCard({
               </td>
               <td className="amount neg">
                 -{formatCents(amountCents)}
-                {/* Show the status toggle only on the last row */}
-                {idx === displayPayments.length - 1 && (
-                  <button
-                    className={paymentStatusClassName(override.creditCardPaymentStatus)}
-                    onClick={handleToggleCreditCardPaymentStatus}
-                    aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
-                    title={paymentStatusTitle(override.creditCardPaymentStatus)}
-                  >
-                    {paymentStatusIcon(override.creditCardPaymentStatus)}
-                  </button>
-                )}
+                <button
+                  className={paymentStatusClassName(override.creditCardPaymentStatus)}
+                  onClick={handleToggleCreditCardPaymentStatus}
+                  aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
+                  title={paymentStatusTitle(override.creditCardPaymentStatus)}
+                >
+                  {paymentStatusIcon(override.creditCardPaymentStatus)}
+                </button>
               </td>
             </tr>
           ))}
