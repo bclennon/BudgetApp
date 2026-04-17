@@ -305,37 +305,56 @@ function PeriodCard({
     onUpdateOverride({ billPaymentStatuses: updated });
   }
 
-  const isProcessed = override.creditCardPaymentStatus === 'processed';
+  // Returns the payment status for a specific credit card in this period.
+  // Reads from the new per-card map; falls back to the legacy global field for old saved data.
+  function getCardStatus(cardId: string): BillPaymentStatus | undefined {
+    if (override.creditCardPaymentStatuses) {
+      return override.creditCardPaymentStatuses[cardId];
+    }
+    return override.creditCardPaymentStatus;
+  }
 
   // Planned payments: distribute surplus across cards in priority order.
   // Only surplus funds (above the minimum daily spend) are available for CC payments.
   const availableCents = period.hasSurplus ? period.surplusCents : 0;
   const plannedPayments = getPlannedCardPayments(availableCents, creditCards);
 
-  // When processed, read what was actually stored (supports both new multi-card
-  // format and legacy single-card fields for backward compatibility).
-  const storedPayments: CreditCardPayment[] = isProcessed
-    ? (override.creditCardPayments ??
-        (override.creditCardPaymentCardId
-          ? [{ cardId: override.creditCardPaymentCardId, amountCents: override.creditCardPaymentAmountCents ?? 0 }]
-          : []))
-    : [];
+  // Map of cardId → stored amount (set when a card's payment was processed).
+  // Supports both the new multi-card format and legacy single-card fields.
+  const storedPaymentsMap = new Map(
+    (override.creditCardPayments ??
+      (override.creditCardPaymentCardId
+        ? [{ cardId: override.creditCardPaymentCardId, amountCents: override.creditCardPaymentAmountCents ?? 0 }]
+        : [])
+    ).map((p) => [p.cardId, p.amountCents]),
+  );
 
-  // The rows to render: stored entries when processed, planned entries otherwise.
-  const displayPayments = isProcessed
-    ? storedPayments
-        .map((p) => {
-          const card = creditCards.find((c) => c.id === p.cardId);
-          return card ? { card, amountCents: p.amountCents } : null;
-        })
-        .filter((x): x is { card: CreditCard; amountCents: number } => x !== null)
-    : plannedPayments;
+  // Build per-card display rows.
+  // Each card appears if it has a planned payment or a stored (processed) payment.
+  // Processed cards show their stored amount; others show their planned amount.
+  const plannedMap = new Map(plannedPayments.map((p) => [p.card.id, p]));
+  const allCardIds = new Set([...plannedMap.keys(), ...storedPaymentsMap.keys()]);
+  const displayPayments: { card: CreditCard; amountCents: number }[] = [];
+  for (const cardId of allCardIds) {
+    const card = creditCards.find((c) => c.id === cardId);
+    if (!card) continue;
+    const status = getCardStatus(cardId);
+    if (status === 'processed') {
+      const amount = storedPaymentsMap.get(cardId);
+      if (amount !== undefined) displayPayments.push({ card, amountCents: amount });
+    } else {
+      const p = plannedMap.get(cardId);
+      if (p) displayPayments.push({ card, amountCents: p.amountCents });
+    }
+  }
 
-  const totalCcPaymentCents = displayPayments.reduce((s, p) => s + p.amountCents, 0);
+  // Only count CC payments that have NOT yet been marked as processed.
+  const unprocessedCcCents = displayPayments
+    .filter(({ card }) => getCardStatus(card.id) !== 'processed')
+    .reduce((s, p) => s + p.amountCents, 0);
 
-  // Once CC payments are processed, stop deducting them from Remaining —
-  // same behaviour as marking a regular bill as processed.
-  const effectiveRemainingCents = period.remainingCents - (isProcessed ? 0 : totalCcPaymentCents);
+  // Once all CC payments are processed, stop deducting them from Remaining.
+  const effectiveRemainingCents = period.remainingCents - unprocessedCcCents;
 
   // Total of all bills and CC payments that have NOT been marked as processed.
   const billStatuses = override.billPaymentStatuses ?? {};
@@ -343,7 +362,6 @@ function PeriodCard({
     const key = bip.isOneTime ? bip.oneTimeBillId! : billKey(bip.bill.id);
     return billStatuses[key] === 'processed' ? sum : sum + bip.bill.amountCents;
   }, 0);
-  const unprocessedCcCents = isProcessed ? 0 : totalCcPaymentCents;
   const totalUnprocessedCents = unprocessedBillsCents + unprocessedCcCents;
 
   // Use remaining days in the period for the current period so the rate
@@ -355,34 +373,54 @@ function PeriodCard({
   const effectiveDays = Math.max(1, remainingDays);
   const effectiveSpendingPerDay = Math.trunc(effectiveRemainingCents / effectiveDays);
 
-  function handleToggleCreditCardPaymentStatus() {
-    const current = override.creditCardPaymentStatus;
-    const next = nextPaymentStatus(current);
-
-    if (next === 'processed' && plannedPayments.length > 0) {
-      // Reduce balances for all planned cards and persist payment details.
-      onCreditCardPaymentProcessed(
-        plannedPayments.map((p) => ({ cardId: p.card.id, amountCents: p.amountCents })),
-      );
-      onUpdateOverride({
-        creditCardPaymentStatus: 'processed',
-        creditCardPayments: plannedPayments.map((p) => ({ cardId: p.card.id, amountCents: p.amountCents })),
-        creditCardPaymentAmountCents: undefined,
-        creditCardPaymentCardId: undefined,
-      });
-    } else if (next === undefined && current === 'processed') {
-      // Restore balances for all stored payments.
-      if (storedPayments.length > 0) {
-        onCreditCardPaymentRestored(storedPayments);
+  function handleToggleCardPaymentStatus(cardId: string, plannedAmountCents: number) {
+    // Migrate legacy single-status data to per-card on first interaction.
+    const baseStatuses: Record<string, BillPaymentStatus> = override.creditCardPaymentStatuses
+      ? { ...override.creditCardPaymentStatuses }
+      : {};
+    if (!override.creditCardPaymentStatuses && override.creditCardPaymentStatus) {
+      const legacyStatus = override.creditCardPaymentStatus;
+      for (const [id] of storedPaymentsMap) {
+        baseStatuses[id] = legacyStatus;
       }
+    }
+
+    const current = baseStatuses[cardId];
+    const next = nextPaymentStatus(current);
+    const newStatuses = { ...baseStatuses };
+    if (next === undefined) {
+      delete newStatuses[cardId];
+    } else {
+      newStatuses[cardId] = next;
+    }
+
+    // Base patch: write per-card statuses and clear the legacy global field.
+    const basePatch: Partial<PayPeriodOverride> = {
+      creditCardPaymentStatuses: newStatuses,
+      creditCardPaymentStatus: undefined,
+    };
+
+    if (next === 'processed') {
+      // Permanently reduce this card's balance and record its payment amount.
+      onCreditCardPaymentProcessed([{ cardId, amountCents: plannedAmountCents }]);
+      const newPayments = [
+        ...(override.creditCardPayments ?? []).filter((p) => p.cardId !== cardId),
+        { cardId, amountCents: plannedAmountCents },
+      ];
+      onUpdateOverride({ ...basePatch, creditCardPayments: newPayments });
+    } else if (next === undefined && current === 'processed') {
+      // Restore this card's balance.
+      const storedAmount = storedPaymentsMap.get(cardId);
+      if (storedAmount !== undefined) {
+        onCreditCardPaymentRestored([{ cardId, amountCents: storedAmount }]);
+      }
+      const newPayments = (override.creditCardPayments ?? []).filter((p) => p.cardId !== cardId);
       onUpdateOverride({
-        creditCardPaymentStatus: undefined,
-        creditCardPayments: undefined,
-        creditCardPaymentAmountCents: undefined,
-        creditCardPaymentCardId: undefined,
+        ...basePatch,
+        creditCardPayments: newPayments.length > 0 ? newPayments : undefined,
       });
     } else {
-      onUpdateOverride({ creditCardPaymentStatus: next });
+      onUpdateOverride(basePatch);
     }
   }
 
@@ -569,7 +607,7 @@ function PeriodCard({
           {displayPayments.map(({ card, amountCents }) => (
             <tr
               key={card.id}
-              className={`row-cc-payment${override.creditCardPaymentStatus === 'processed' ? ' row-bill-processed' : override.creditCardPaymentStatus === 'submitted' ? ' row-bill-submitted' : ''}`}
+              className={`row-cc-payment${getCardStatus(card.id) === 'processed' ? ' row-bill-processed' : getCardStatus(card.id) === 'submitted' ? ' row-bill-submitted' : ''}`}
             >
               <td>
                 → {card.name}
@@ -580,12 +618,12 @@ function PeriodCard({
               <td className="amount neg">
                 -{formatCents(amountCents)}
                 <button
-                  className={paymentStatusClassName(override.creditCardPaymentStatus)}
-                  onClick={handleToggleCreditCardPaymentStatus}
-                  aria-label={paymentStatusTitle(override.creditCardPaymentStatus)}
-                  title={paymentStatusTitle(override.creditCardPaymentStatus)}
+                  className={paymentStatusClassName(getCardStatus(card.id))}
+                  onClick={() => handleToggleCardPaymentStatus(card.id, amountCents)}
+                  aria-label={paymentStatusTitle(getCardStatus(card.id))}
+                  title={paymentStatusTitle(getCardStatus(card.id))}
                 >
-                  {paymentStatusIcon(override.creditCardPaymentStatus)}
+                  {paymentStatusIcon(getCardStatus(card.id))}
                 </button>
               </td>
             </tr>
@@ -668,7 +706,7 @@ export default function PayPeriodsPage({
   // When a period plans to pay toward credit cards (even before marked
   // as submitted/processed), those amounts are deducted from the running balances
   // so that subsequent periods see the correct remaining debt.
-  // Periods whose payment is already 'processed' are skipped because the
+  // Cards whose payment is already 'processed' are skipped because the
   // CreditCard.balanceCents in app state has already been permanently reduced.
   const periodsWithCards = useMemo(() => {
     const result: { period: PayPeriod; adjustedCards: CreditCard[] }[] = [];
@@ -676,14 +714,20 @@ export default function PayPeriodsPage({
     for (const period of periods) {
       const adjustedCards = runningCards;
       const override = overrides[period.startDate];
-      if (override?.creditCardPaymentStatus !== 'processed') {
+      const ccStatuses = override?.creditCardPaymentStatuses;
+      const legacyCcProcessed = !ccStatuses && override?.creditCardPaymentStatus === 'processed';
+
+      if (!legacyCcProcessed) {
         const plannedAmount = period.hasSurplus ? period.surplusCents : 0;
         const payments = getPlannedCardPayments(plannedAmount, adjustedCards);
         if (payments.length > 0) {
           const paymentMap = new Map(payments.map((p) => [p.card.id, p.amountCents]));
           runningCards = runningCards.map((c) => {
             const planned = paymentMap.get(c.id);
-            return planned ? { ...c, balanceCents: Math.max(0, c.balanceCents - planned) } : c;
+            if (!planned) return c;
+            // Skip deduction for cards whose payment is already permanently processed.
+            if (ccStatuses?.[c.id] === 'processed') return c;
+            return { ...c, balanceCents: Math.max(0, c.balanceCents - planned) };
           });
         }
       }

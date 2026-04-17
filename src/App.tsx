@@ -190,6 +190,7 @@ function AppShell() {
     // Remove optional fields that are explicitly cleared so that storage (especially
     // Firestore, which rejects undefined values) doesn't receive undefined.
     if (merged.paycheckAmountCents === undefined) delete merged.paycheckAmountCents;
+    if (merged.creditCardPaymentStatuses === undefined) delete merged.creditCardPaymentStatuses;
     if (merged.creditCardPaymentStatus === undefined) delete merged.creditCardPaymentStatus;
     if (merged.creditCardPayments === undefined) delete merged.creditCardPayments;
     if (merged.creditCardPaymentAmountCents === undefined) delete merged.creditCardPaymentAmountCents;
