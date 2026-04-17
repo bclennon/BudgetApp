@@ -51,7 +51,7 @@ function AppShell() {
 
   /**
    * Returns a valid sheets token, requesting a fresh one if needed.
-   * Throws if the token cannot be obtained.
+   * Throws if the token cannot be obtained (e.g. user cancels the OAuth popup).
    */
   const getToken = useCallback(async (): Promise<string> => {
     if (sheetsToken) return sheetsToken;
@@ -59,16 +59,23 @@ function AppShell() {
   }, [sheetsToken, requestSheetsToken]);
 
   /**
-   * Resolves and caches the spreadsheet ID for the current user.
-   * Returns null if the token cannot be obtained.
+   * Gets a valid token and the spreadsheet ID in a single step, requesting a
+   * new OAuth token if one is not already available. Returns null only if the
+   * user cancels the OAuth popup or the spreadsheet cannot be created.
+   *
+   * Using a single helper avoids calling getToken() twice per save (once inside
+   * resolveSpreadsheetId and once for the write), which would trigger two
+   * separate OAuth popups when the token is stale.
    */
-  const resolveSpreadsheetId = useCallback(async (uid: string): Promise<string | null> => {
-    if (spreadsheetIdRef.current) return spreadsheetIdRef.current;
+  const getSheetContext = useCallback(async (uid: string): Promise<{ token: string; spreadsheetId: string } | null> => {
     try {
       const token = await getToken();
-      const id = await getOrCreateSpreadsheet(token, uid);
-      spreadsheetIdRef.current = id;
-      return id;
+      let spreadsheetId = spreadsheetIdRef.current;
+      if (!spreadsheetId) {
+        spreadsheetId = await getOrCreateSpreadsheet(token, uid);
+        spreadsheetIdRef.current = spreadsheetId;
+      }
+      return { token, spreadsheetId };
     } catch {
       return null;
     }
@@ -90,10 +97,9 @@ function AppShell() {
     const uid = user.uid;
     async function syncFromSheets() {
       try {
-        const spreadsheetId = await resolveSpreadsheetId(uid);
-        if (!spreadsheetId || cancelled) return;
-        const token = await getToken();
-        const data = await loadAllFromSheets(token, spreadsheetId);
+        const ctx = await getSheetContext(uid);
+        if (!ctx || cancelled) return;
+        const data = await loadAllFromSheets(ctx.token, ctx.spreadsheetId);
         if (cancelled) return;
         if (data.bills !== null) {
           setBills(data.bills);
@@ -119,14 +125,14 @@ function AppShell() {
     }
     syncFromSheets();
     return () => { cancelled = true; };
-  }, [user, sheetsToken, getToken, resolveSpreadsheetId]);
+  }, [user, sheetsToken, getSheetContext]);
 
   async function saveBillsCloud(bills: Bill[]) {
     if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
     try {
-      const spreadsheetId = await resolveSpreadsheetId(user.uid);
-      if (!spreadsheetId) return;
-      await saveBillsToSheets(await getToken(), spreadsheetId, bills);
+      await saveBillsToSheets(ctx.token, ctx.spreadsheetId, bills);
     } catch (err) {
       console.error('Failed to save bills to Google Sheets:', err);
     }
@@ -134,10 +140,10 @@ function AppShell() {
 
   async function saveSettingsCloud(settings: PaySettings) {
     if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
     try {
-      const spreadsheetId = await resolveSpreadsheetId(user.uid);
-      if (!spreadsheetId) return;
-      await saveSettingsToSheets(await getToken(), spreadsheetId, settings);
+      await saveSettingsToSheets(ctx.token, ctx.spreadsheetId, settings);
     } catch (err) {
       console.error('Failed to save settings to Google Sheets:', err);
     }
@@ -145,10 +151,10 @@ function AppShell() {
 
   async function saveOverridesCloud(overrides: PeriodOverrides) {
     if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
     try {
-      const spreadsheetId = await resolveSpreadsheetId(user.uid);
-      if (!spreadsheetId) return;
-      await savePeriodOverridesToSheets(await getToken(), spreadsheetId, overrides);
+      await savePeriodOverridesToSheets(ctx.token, ctx.spreadsheetId, overrides);
     } catch (err) {
       console.error('Failed to save period overrides to Google Sheets:', err);
     }
@@ -156,10 +162,10 @@ function AppShell() {
 
   async function saveCardsCloud(cards: CreditCard[]) {
     if (!user) return;
+    const ctx = await getSheetContext(user.uid);
+    if (!ctx) return;
     try {
-      const spreadsheetId = await resolveSpreadsheetId(user.uid);
-      if (!spreadsheetId) return;
-      await saveCreditCardsToSheets(await getToken(), spreadsheetId, cards);
+      await saveCreditCardsToSheets(ctx.token, ctx.spreadsheetId, cards);
     } catch (err) {
       console.error('Failed to save credit cards to Google Sheets:', err);
     }
