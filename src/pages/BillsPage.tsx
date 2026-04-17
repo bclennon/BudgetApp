@@ -16,7 +16,7 @@ function strToCents(value: string): number {
 
 interface BillFormProps {
   initial?: Bill;
-  onSave: (name: string, dayOfMonth: number, amountCents: number) => void;
+  onSave: (name: string, dayOfMonth: number, amountCents: number, url: string) => void;
   onCancel: () => void;
 }
 
@@ -24,6 +24,7 @@ function BillForm({ initial, onSave, onCancel }: BillFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [day, setDay] = useState(String(initial?.dayOfMonth ?? 1));
   const [amount, setAmount] = useState(initial ? dollarsToStr(initial.amountCents) : '');
+  const [url, setUrl] = useState(initial?.url ?? '');
   const [error, setError] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
@@ -33,7 +34,19 @@ function BillForm({ initial, onSave, onCancel }: BillFormProps) {
     if (!name.trim()) { setError('Name is required.'); return; }
     if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) { setError('Day must be 1–31.'); return; }
     if (isNaN(amountNum) || amountNum <= 0) { setError('Enter a valid amount.'); return; }
-    onSave(name.trim(), dayNum, strToCents(amount));
+    if (url.trim()) {
+      try {
+        const parsed = new URL(url.trim());
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          setError('URL must start with http:// or https://.');
+          return;
+        }
+      } catch {
+        setError('Enter a valid URL (e.g. https://example.com).');
+        return;
+      }
+    }
+    onSave(name.trim(), dayNum, strToCents(amount), url.trim());
   }
 
   return (
@@ -65,6 +78,15 @@ function BillForm({ initial, onSave, onCancel }: BillFormProps) {
             placeholder="0.00"
           />
         </div>
+      </div>
+      <div className="form-group">
+        <label>Payment URL (optional)</label>
+        <input
+          type="url"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://example.com/pay"
+        />
       </div>
       <div className="form-actions">
         <button type="submit" className="btn-primary">{initial ? 'Save' : 'Add Bill'}</button>
@@ -176,7 +198,7 @@ function ImportPanel({ onConfirm, onCancel }: ImportPanelProps) {
 
 interface Props {
   bills: Bill[];
-  onAdd: (name: string, dayOfMonth: number, amountCents: number) => void;
+  onAdd: (name: string, dayOfMonth: number, amountCents: number, url: string) => void;
   onUpdate: (bill: Bill) => void;
   onDelete: (id: number) => void;
   onImportBills: (items: { name: string; dayOfMonth: number; amountCents: number }[]) => void;
@@ -187,8 +209,8 @@ export default function BillsPage({ bills, onAdd, onUpdate, onDelete, onImportBi
   const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
 
-  function handleAdd(name: string, dayOfMonth: number, amountCents: number) {
-    onAdd(name, dayOfMonth, amountCents);
+  function handleAdd(name: string, dayOfMonth: number, amountCents: number, url: string) {
+    onAdd(name, dayOfMonth, amountCents, url);
     setAdding(false);
   }
 
@@ -197,8 +219,8 @@ export default function BillsPage({ bills, onAdd, onUpdate, onDelete, onImportBi
     setImporting(false);
   }
 
-  function handleUpdate(bill: Bill, name: string, dayOfMonth: number, amountCents: number) {
-    onUpdate({ ...bill, name, dayOfMonth, amountCents });
+  function handleUpdate(bill: Bill, name: string, dayOfMonth: number, amountCents: number, url: string) {
+    onUpdate({ ...bill, name, dayOfMonth, amountCents, url: url || undefined });
     setEditingId(null);
   }
 
@@ -237,7 +259,7 @@ export default function BillsPage({ bills, onAdd, onUpdate, onDelete, onImportBi
                 <h2 className="card-title">Edit Bill</h2>
                 <BillForm
                   initial={bill}
-                  onSave={(name, day, amt) => handleUpdate(bill, name, day, amt)}
+                  onSave={(name, day, amt, url) => handleUpdate(bill, name, day, amt, url)}
                   onCancel={() => setEditingId(null)}
                 />
               </>
