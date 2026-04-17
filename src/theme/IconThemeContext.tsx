@@ -115,8 +115,12 @@ export const ICON_THEMES: IconTheme[] = [
 const STORAGE_KEY = 'budgetapp_icon_theme';
 
 function getDefaultTheme(): IconThemeId {
-  const stored = localStorage.getItem(STORAGE_KEY) as IconThemeId | null;
-  return ICON_THEMES.some((t) => t.id === stored) ? stored! : 'classic';
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY) as IconThemeId | null;
+    return ICON_THEMES.some((t) => t.id === stored) ? stored! : 'classic';
+  } catch {
+    return 'classic';
+  }
 }
 
 interface IconThemeContextValue {
@@ -133,7 +137,11 @@ export function IconThemeProvider({ children }: { children: ReactNode }) {
   const iconTheme = ICON_THEMES.find((t) => t.id === iconThemeId) ?? ICON_THEMES[0];
 
   function setIconTheme(id: IconThemeId) {
-    localStorage.setItem(STORAGE_KEY, id);
+    try {
+      localStorage.setItem(STORAGE_KEY, id);
+    } catch {
+      // localStorage unavailable; proceed with in-memory update only
+    }
     setIconThemeId(id);
   }
 

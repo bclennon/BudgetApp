@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Frequency, PaySettings } from '../domain/models';
 import { useTheme, type Theme } from '../theme/ThemeContext';
-import { useIconTheme, ICON_THEMES, type IconThemeId } from '../theme/IconThemeContext';
+import { useIconTheme, ICON_THEMES } from '../theme/IconThemeContext';
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: string }[] = [
   { value: 'system', label: 'System', icon: '💻' },
@@ -153,7 +153,7 @@ export default function SettingsPage({ settings, onSave }: Props) {
               key={opt.id}
               type="button"
               className={`theme-btn${iconThemeId === opt.id ? ' active' : ''}`}
-              onClick={() => setIconTheme(opt.id as IconThemeId)}
+              onClick={() => setIconTheme(opt.id)}
             >
               <span className="theme-btn-icon">{opt.preview}</span>
               <span>{opt.label}</span>
