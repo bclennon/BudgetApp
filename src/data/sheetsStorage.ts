@@ -62,13 +62,37 @@ async function createDataSpreadsheet(token: string): Promise<string> {
 }
 
 /**
- * Returns the spreadsheet ID for this user's data store. If no spreadsheet ID
- * is cached in localStorage, a new spreadsheet is created and its ID cached.
+ * Searches Google Drive for an existing spreadsheet with the app's title.
+ * Returns the ID of the first match, or null if none is found.
+ */
+async function findExistingSpreadsheet(token: string): Promise<string | null> {
+  const escapedTitle = SPREADSHEET_TITLE.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const query = encodeURIComponent(
+    `name='${escapedTitle}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+  );
+  const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)&pageSize=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    console.error(`Drive file search failed (HTTP ${res.status}); will create a new spreadsheet.`);
+    return null;
+  }
+  const json = (await res.json()) as { files?: { id: string }[] };
+  return json.files?.[0]?.id ?? null;
+}
+
+/**
+ * Returns the spreadsheet ID for this user's data store. Looks up the ID in
+ * this order: localStorage cache → existing Drive file → newly created file.
+ * This prevents duplicate spreadsheets when localStorage is cleared or the app
+ * is opened on a new device.
  */
 export async function getOrCreateSpreadsheet(token: string, uid: string): Promise<string> {
   const stored = getStoredSpreadsheetId(uid);
   if (stored) return stored;
-  const id = await createDataSpreadsheet(token);
+  const existing = await findExistingSpreadsheet(token);
+  const id = existing ?? (await createDataSpreadsheet(token));
   storeSpreadsheetId(uid, id);
   return id;
 }
