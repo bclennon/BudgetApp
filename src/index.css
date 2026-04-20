@@ -583,6 +583,7 @@ body,
 .override-tag  { font-size: 0.73rem; color: var(--primary);  font-style: italic; margin-left: 4px; }
 .moved-tag     { font-size: 0.73rem; color: var(--gray-400); margin-left: 4px; }
 .one-time-tag  { font-size: 0.73rem; color: var(--green); margin-left: 4px; }
+.deleted-tag   { font-size: 0.73rem; color: var(--red); margin-left: 4px; }
 
 /* Moved-in bill row: slightly muted */
 .row-moved td { color: var(--gray-500); }
@@ -617,6 +618,14 @@ body,
 /* Processed bill row: muted to indicate done */
 .row-bill-processed td { color: var(--gray-400); text-decoration: line-through; }
 .row-bill-processed .btn-payment-processed { text-decoration: none; }
+
+/* Deleted/skipped bill row: muted with strikethrough */
+.row-bill-deleted td { color: var(--gray-400); text-decoration: line-through; }
+.row-bill-deleted .deleted-tag { text-decoration: none; }
+.row-bill-deleted .btn-inline { text-decoration: none; }
+
+/* Section label row (e.g. "Skipped bills") */
+.section-label { font-size: 0.73rem; color: var(--gray-400); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 6px; }
 
 @media (min-width: 640px) {
   .tab-btn { font-size: 0.8rem; padding: 12px 8px; }

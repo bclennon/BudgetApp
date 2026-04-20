@@ -67,7 +67,7 @@ export function generatePayPeriods(
 
     const override = overrides[currentStart];
     const effectivePaycheckCents = override?.paycheckAmountCents ?? settings.paycheckAmountCents;
-    const movedOutIds = new Set(override?.movedOutBillIds ?? []);
+    const movedOutIds = new Set([...(override?.movedOutBillIds ?? []), ...(override?.deletedBillIds ?? [])]);
     const amountOverrides = override?.billAmountOverrides ?? {};
 
     const startParts = parseDate(currentStart);

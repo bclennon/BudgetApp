@@ -303,6 +303,7 @@ function safeBillUrl(url: string | undefined): string | null {
 interface PeriodCardProps {
   period: PayPeriod;
   allPeriods: PayPeriod[];
+  allBills: Bill[];
   override: PayPeriodOverride;
   defaultPaycheckCents: number;
   creditCards: CreditCard[];
@@ -317,6 +318,7 @@ interface PeriodCardProps {
 function PeriodCard({
   period,
   allPeriods,
+  allBills,
   override,
   defaultPaycheckCents,
   creditCards,
@@ -352,6 +354,17 @@ function PeriodCard({
 
   function handleDeleteOneTime(id: string) {
     onUpdateOverride({ oneTimeBills: override.oneTimeBills.filter((b) => b.id !== id) });
+  }
+
+  function handleDeleteBill(billId: number) {
+    const current = override.deletedBillIds ?? [];
+    if (!current.includes(billId)) {
+      onUpdateOverride({ deletedBillIds: [...current, billId] });
+    }
+  }
+
+  function handleUndeleteBill(billId: number) {
+    onUpdateOverride({ deletedBillIds: (override.deletedBillIds ?? []).filter((id) => id !== billId) });
   }
 
   function handleSaveBillAmount(key: string, cents: number | undefined) {
@@ -504,6 +517,12 @@ function PeriodCard({
   const movedInBills = period.bills.filter((b) => b.movedFromPeriod !== undefined);
   const oneTimeBills = period.bills.filter((b) => b.isOneTime);
 
+  // Deleted (skipped) bills: look up full bill objects from allBills
+  const deletedBillIds = override.deletedBillIds ?? [];
+  const deletedBills = deletedBillIds
+    .map((id) => allBills.find((b) => b.id === id))
+    .filter((b): b is Bill => b !== undefined);
+
   return (
     <div className="card period-card">
       <div className="period-header">
@@ -581,6 +600,14 @@ function PeriodCard({
                     title="Move to another pay period"
                   >
                     ↔
+                  </button>
+                  <button
+                    className="btn-xs btn-inline btn-danger-xs"
+                    onClick={() => handleDeleteBill(bill.id)}
+                    aria-label="Delete bill from this period"
+                    title="Remove this bill from this pay period"
+                  >
+                    🗑
                   </button>
                 </td>
               </tr>
@@ -758,6 +785,32 @@ function PeriodCard({
             />
           )}
 
+          {/* ── Deleted (skipped) bills ── */}
+          {deletedBills.length > 0 && (
+            <tr className="row-section-label">
+              <td colSpan={2} className="section-label">Skipped bills</td>
+            </tr>
+          )}
+          {deletedBills.map((bill) => (
+            <tr key={`del-${bill.id}`} className="row-bill row-bill-deleted">
+              <td>
+                <span className="deleted-bill-name">{bill.name}</span>
+                <span className="deleted-tag"> ✕ skipped</span>
+              </td>
+              <td className="amount neg deleted-bill-amount">
+                -{formatCents(bill.amountCents)}
+                <button
+                  className="btn-xs btn-inline"
+                  onClick={() => handleUndeleteBill(bill.id)}
+                  aria-label="Restore bill to this period"
+                  title="Restore bill to this pay period"
+                >
+                  ↩
+                </button>
+              </td>
+            </tr>
+          ))}
+
           {/* ── Credit card payment(s) ── */}
           {displayPayments.map(({ card, amountCents }) => (
             <tr
@@ -910,6 +963,7 @@ export default function PayPeriodsPage({
             key={period.startDate}
             period={period}
             allPeriods={periods}
+            allBills={bills}
             override={overrides[period.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
             creditCards={adjustedCards}
