@@ -44,6 +44,7 @@ export interface PayPeriodOverride {
   oneTimeBills: OneTimeBill[];  // manually added one-time bills
   movedInBills: { billId: number; fromPeriodStart: string; dueDate: string }[]; // recurring bills moved into this period
   movedOutBillIds: number[]; // recurring bill IDs moved out of this period
+  deletedBillIds?: number[]; // recurring bill IDs manually deleted/skipped from this period
   /** Map of bill key → payment status. Key: String(bill.id) for recurring/moved bills, oneTimeBill.id for one-time bills. */
   billPaymentStatuses: Record<string, BillPaymentStatus>;
   /** Map of bill key → per-period amount override in cents. Key: String(bill.id) for recurring/moved bills. Does not affect the bill's stored amount. */
@@ -72,7 +73,7 @@ export type PeriodOverrides = Record<string, PayPeriodOverride>;
 
 /** Returns a blank PayPeriodOverride (no changes). */
 export function emptyOverride(): PayPeriodOverride {
-  return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} };
+  return { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], deletedBillIds: [], billPaymentStatuses: {} };
 }
 
 function sortedCardsWithBalance(cards: CreditCard[]): CreditCard[] {
