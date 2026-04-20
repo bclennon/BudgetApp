@@ -786,6 +786,11 @@ function PeriodCard({
           )}
 
           {/* ── Deleted (skipped) bills ── */}
+          {deletedBills.length > 0 && (
+            <tr className="row-section-label">
+              <td colSpan={2} className="section-label">Skipped bills</td>
+            </tr>
+          )}
           {deletedBills.map((bill) => (
             <tr key={`del-${bill.id}`} className="row-bill row-bill-deleted">
               <td>

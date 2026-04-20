@@ -624,6 +624,9 @@ body,
 .row-bill-deleted .deleted-tag { text-decoration: none; }
 .row-bill-deleted .btn-inline { text-decoration: none; }
 
+/* Section label row (e.g. "Skipped bills") */
+.section-label { font-size: 0.73rem; color: var(--gray-400); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding-top: 6px; }
+
 @media (min-width: 640px) {
   .tab-btn { font-size: 0.8rem; padding: 12px 8px; }
   .tab-icon { font-size: 1.3rem; }
