@@ -308,6 +308,7 @@ interface PeriodCardProps {
   defaultPaycheckCents: number;
   creditCards: CreditCard[];
   today: string;
+  minSpendPerDayCents: number;
   onUpdateOverride: (patch: Partial<PayPeriodOverride>) => void;
   onMoveBill: (billId: number, toPeriodStart: string, toDueDate: string) => void;
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
@@ -323,6 +324,7 @@ function PeriodCard({
   defaultPaycheckCents,
   creditCards,
   today,
+  minSpendPerDayCents,
   onUpdateOverride,
   onMoveBill,
   onUnmoveBill,
@@ -401,9 +403,22 @@ function PeriodCard({
     return override.creditCardPaymentStatus;
   }
 
+  // Use remaining days in the period for the current period so the rate
+  // reflects how much can actually be spent from today forward.
+  const isCurrentPeriod = today >= period.startDate && today <= period.endDate;
+  const remainingDays = isCurrentPeriod
+    ? daysBetween(today, period.endDate) + 1
+    : period.daysInPeriod;
+  const effectiveDays = Math.max(1, remainingDays);
+
   // Planned payments: distribute surplus across cards in priority order.
-  // Only surplus funds (above the minimum daily spend) are available for CC payments.
-  const availableCents = period.hasSurplus ? period.surplusCents : 0;
+  // When minSpendPerDayCents is set, compute surplus as what remains above
+  // the daily spending cap for the effective (remaining) days of this period.
+  // This ensures the current period's surplus reflects remaining days, not the
+  // full period, so the capped spend/day and CC allocation stay consistent.
+  const availableCents = minSpendPerDayCents > 0
+    ? Math.max(0, period.remainingCents - minSpendPerDayCents * effectiveDays)
+    : (period.hasSurplus ? period.surplusCents : 0);
   const plannedPayments = getPlannedCardPayments(availableCents, creditCards);
 
   // Map of cardId → stored amount (set when a card's payment was processed).
@@ -451,13 +466,6 @@ function PeriodCard({
   }, 0);
   const totalUnprocessedCents = unprocessedBillsCents + unprocessedCcCents;
 
-  // Use remaining days in the period for the current period so the rate
-  // reflects how much can actually be spent from today forward.
-  const isCurrentPeriod = today >= period.startDate && today <= period.endDate;
-  const remainingDays = isCurrentPeriod
-    ? daysBetween(today, period.endDate) + 1
-    : period.daysInPeriod;
-  const effectiveDays = Math.max(1, remainingDays);
   const effectiveSpendingPerDay = Math.trunc(effectiveRemainingCents / effectiveDays);
 
   function handleToggleCardPaymentStatus(cardId: string, plannedAmountCents: number) {
@@ -926,7 +934,14 @@ export default function PayPeriodsPage({
       const legacyCcProcessed = !ccStatuses && override?.creditCardPaymentStatus === 'processed';
 
       if (!legacyCcProcessed) {
-        const plannedAmount = period.hasSurplus ? period.surplusCents : 0;
+        const isCurrentPeriod = today >= period.startDate && today <= period.endDate;
+        const remainingDays = isCurrentPeriod
+          ? daysBetween(today, period.endDate) + 1
+          : period.daysInPeriod;
+        const effectiveDays = Math.max(1, remainingDays);
+        const plannedAmount = settings.minSpendPerDayCents > 0
+          ? Math.max(0, period.remainingCents - settings.minSpendPerDayCents * effectiveDays)
+          : (period.hasSurplus ? period.surplusCents : 0);
         const payments = getPlannedCardPayments(plannedAmount, adjustedCards);
         if (payments.length > 0) {
           const paymentMap = new Map(payments.map((p) => [p.card.id, p.amountCents]));
@@ -942,7 +957,7 @@ export default function PayPeriodsPage({
       result.push({ period, adjustedCards });
     }
     return result;
-  }, [periods, creditCards, overrides]);
+  }, [periods, creditCards, overrides, today, settings.minSpendPerDayCents]);
 
   return (
     <div className="page">
@@ -968,6 +983,7 @@ export default function PayPeriodsPage({
             defaultPaycheckCents={settings.paycheckAmountCents}
             creditCards={adjustedCards}
             today={today}
+            minSpendPerDayCents={settings.minSpendPerDayCents}
             onUpdateOverride={(patch) => onUpdatePeriodOverride(period.startDate, patch)}
             onMoveBill={(billId, toPeriodStart, toDueDate) =>
               onMoveBill(billId, period.startDate, toPeriodStart, toDueDate)
