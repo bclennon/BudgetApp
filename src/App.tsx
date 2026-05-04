@@ -29,8 +29,9 @@ import BillsPage from './pages/BillsPage';
 import SettingsPage from './pages/SettingsPage';
 import BackupSyncPage from './pages/BackupSyncPage';
 import CreditCardsPage from './pages/CreditCardsPage';
+import ArchivedPeriodsPage from './pages/ArchivedPeriodsPage';
 
-type Tab = 'periods' | 'bills' | 'creditcards' | 'settings' | 'backup';
+type Tab = 'periods' | 'bills' | 'creditcards' | 'settings' | 'backup' | 'archived';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'periods', label: 'Pay Periods' },
@@ -38,6 +39,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'creditcards', label: 'Credit Cards' },
   { id: 'settings', label: 'Settings' },
   { id: 'backup', label: 'Backup' },
+  { id: 'archived', label: 'Archived' },
 ];
 
 // Maximum number of undo steps kept in memory per session.
@@ -444,6 +446,18 @@ function AppShell() {
     applyOverrides(newOverrides);
   }
 
+  function archivePeriod(periodStart: string) {
+    const prev = periodOverrides[periodStart] ?? emptyOverride();
+    applyOverrides({ ...periodOverrides, [periodStart]: { ...prev, archived: true } });
+  }
+
+  function unarchivePeriod(periodStart: string) {
+    const prev = periodOverrides[periodStart] ?? emptyOverride();
+    const updated = { ...prev };
+    delete updated.archived;
+    applyOverrides({ ...periodOverrides, [periodStart]: updated });
+  }
+
   function undo() {
     setUndoHistory((prev) => {
       if (prev.length === 0) return prev;
@@ -474,6 +488,7 @@ function AppShell() {
     creditcards: iconTheme.icons.creditCards,
     settings: iconTheme.icons.settings,
     backup: iconTheme.icons.backup,
+    archived: iconTheme.icons.archived,
   };
 
   return (
@@ -581,6 +596,7 @@ function AppShell() {
             canUndo={undoHistory.length > 0}
             onCreditCardPaymentProcessed={handleCreditCardPaymentProcessed}
             onCreditCardPaymentRestored={handleCreditCardPaymentRestored}
+            onArchivePeriod={archivePeriod}
           />
         )}
         {tab === 'bills' && (
@@ -602,6 +618,20 @@ function AppShell() {
             creditCards={creditCards}
             periodOverrides={periodOverrides}
             onImport={importData}
+          />
+        )}
+        {tab === 'archived' && (
+          <ArchivedPeriodsPage
+            bills={bills}
+            settings={settings}
+            overrides={periodOverrides}
+            creditCards={creditCards}
+            onUpdatePeriodOverride={updatePeriodOverride}
+            onMoveBill={moveBill}
+            onUnmoveBill={unmoveBill}
+            onCreditCardPaymentProcessed={handleCreditCardPaymentProcessed}
+            onCreditCardPaymentRestored={handleCreditCardPaymentRestored}
+            onUnarchivePeriod={unarchivePeriod}
           />
         )}
       </main>

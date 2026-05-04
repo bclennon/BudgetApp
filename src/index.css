@@ -243,9 +243,11 @@ body,
 
 .period-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   margin-bottom: 10px;
+  gap: 4px;
 }
 
 .period-range { font-weight: 700; font-size: 0.95rem; }
@@ -489,6 +491,12 @@ body,
 
 .btn-danger-xs { color: var(--red); }
 .btn-danger-xs:hover { background: var(--red-light); border-color: var(--red); }
+
+.btn-archive { color: var(--gray-500); margin-left: auto; }
+.btn-archive:hover { background: var(--amber-light); border-color: var(--amber); color: var(--amber); }
+
+.btn-unarchive { color: var(--primary); margin-left: auto; }
+.btn-unarchive:hover { background: var(--primary-light); border-color: var(--primary); }
 
 /* Inline button placed next to cell text (no extra visual weight) */
 .btn-inline {
