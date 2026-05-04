@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Bill, CreditCard, CreditCardPayment, PaySettings, PeriodOverrides, PayPeriodOverride } from './domain/models';
 import { emptyOverride } from './domain/models';
-import {
-  loadBills, loadSettings, saveBills, saveSettings, getNextBillId,
-  loadPeriodOverrides, savePeriodOverrides,
-  loadCreditCards, saveCreditCards,
-} from './data/storage';
+import { getNextBillId } from './data/storage';
 import {
   getOrCreateSpreadsheet,
   findSpreadsheetId,
@@ -49,10 +45,10 @@ function AppShell() {
   const { user, loading, sheetsToken, requestSheetsToken, signOut } = useAuth();
   const { iconTheme } = useIconTheme();
   const [tab, setTab] = useState<Tab>('periods');
-  const [bills, setBills] = useState<Bill[]>(() => loadBills());
-  const [settings, setSettings] = useState<PaySettings | null>(() => loadSettings());
-  const [periodOverrides, setPeriodOverrides] = useState<PeriodOverrides>(() => loadPeriodOverrides());
-  const [creditCards, setCreditCards] = useState<CreditCard[]>(() => loadCreditCards());
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [settings, setSettings] = useState<PaySettings | null>(null);
+  const [periodOverrides, setPeriodOverrides] = useState<PeriodOverrides>({});
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [undoHistory, setUndoHistory] = useState<PeriodOverrides[]>([]);
   /** True once the initial load attempt (from Sheets or localStorage) has completed. */
   const [dataReady, setDataReady] = useState(false);
@@ -120,7 +116,7 @@ function AppShell() {
       spreadsheetIdPromiseRef.current = null;
       return;
     }
-    // No sheets token yet — use localStorage data directly (no sync banner).
+    // No sheets token yet — show app with empty data until token is available.
     if (!sheetsToken) {
       setDataReady(true);
       return;
@@ -150,19 +146,15 @@ function AppShell() {
         if (cancelled) return;
         if (data.bills !== null) {
           setBills(data.bills);
-          saveBills(data.bills);
         }
         if (data.settings !== null) {
           setSettings(data.settings);
-          saveSettings(data.settings);
         }
         if (data.periodOverrides !== null) {
           setPeriodOverrides(data.periodOverrides);
-          savePeriodOverrides(data.periodOverrides);
         }
         if (data.creditCards !== null) {
           setCreditCards(data.creditCards);
-          saveCreditCards(data.creditCards);
         }
       } catch (err) {
         if (err instanceof SpreadsheetNotFoundError) {
@@ -193,7 +185,7 @@ function AppShell() {
       await saveBillsToSheets(ctx.token, ctx.spreadsheetId, bills);
     } catch (err) {
       console.error('Failed to save bills to Google Sheets:', err);
-      setCloudSaveError('Could not save bills to Google Sheets. Your changes are saved locally.');
+      setCloudSaveError('Could not save bills to Google Sheets. Please try again.');
     }
   }
 
@@ -205,7 +197,7 @@ function AppShell() {
       await saveSettingsToSheets(ctx.token, ctx.spreadsheetId, settings);
     } catch (err) {
       console.error('Failed to save settings to Google Sheets:', err);
-      setCloudSaveError('Could not save settings to Google Sheets. Your changes are saved locally.');
+      setCloudSaveError('Could not save settings to Google Sheets. Please try again.');
     }
   }
 
@@ -217,7 +209,7 @@ function AppShell() {
       await savePeriodOverridesToSheets(ctx.token, ctx.spreadsheetId, overrides);
     } catch (err) {
       console.error('Failed to save period overrides to Google Sheets:', err);
-      setCloudSaveError('Could not save period data to Google Sheets. Your changes are saved locally.');
+      setCloudSaveError('Could not save period data to Google Sheets. Please try again.');
     }
   }
 
@@ -229,7 +221,7 @@ function AppShell() {
       await saveCreditCardsToSheets(ctx.token, ctx.spreadsheetId, cards);
     } catch (err) {
       console.error('Failed to save credit cards to Google Sheets:', err);
-      setCloudSaveError('Could not save credit cards to Google Sheets. Your changes are saved locally.');
+      setCloudSaveError('Could not save credit cards to Google Sheets. Please try again.');
     }
   }
 
@@ -243,7 +235,7 @@ function AppShell() {
     ]);
     const anyFailed = results.some((r) => r.status === 'rejected');
     if (anyFailed) {
-      setCloudSaveError('Some data could not be saved to the new Google Sheets file. Your changes are saved locally.');
+      setCloudSaveError('Some data could not be saved to the new Google Sheets file. Please try again.');
     }
   }
 
@@ -296,27 +288,23 @@ function AppShell() {
     if (url) newBill.url = url;
     const updated = [...bills, newBill];
     setBills(updated);
-    saveBills(updated);
     saveBillsCloud(updated);
   }
 
   function updateBill(bill: Bill) {
     const updated = bills.map((b) => (b.id === bill.id ? bill : b));
     setBills(updated);
-    saveBills(updated);
     saveBillsCloud(updated);
   }
 
   function deleteBill(id: number) {
     const updated = bills.filter((b) => b.id !== id);
     setBills(updated);
-    saveBills(updated);
     saveBillsCloud(updated);
   }
 
   function updateSettings(s: PaySettings) {
     setSettings(s);
-    saveSettings(s);
     saveSettingsCloud(s);
   }
 
@@ -329,21 +317,18 @@ function AppShell() {
     };
     const updated = [...creditCards, newCard];
     setCreditCards(updated);
-    saveCreditCards(updated);
     saveCardsCloud(updated);
   }
 
   function updateCreditCard(card: CreditCard) {
     const updated = creditCards.map((c) => (c.id === card.id ? card : c));
     setCreditCards(updated);
-    saveCreditCards(updated);
     saveCardsCloud(updated);
   }
 
   function deleteCreditCard(id: string) {
     const updated = creditCards.filter((c) => c.id !== id);
     setCreditCards(updated);
-    saveCreditCards(updated);
     saveCardsCloud(updated);
   }
 
@@ -354,7 +339,6 @@ function AppShell() {
       return { ...c, balanceCents: Math.max(0, c.balanceCents - payment.amountCents) };
     });
     setCreditCards(updated);
-    saveCreditCards(updated);
     saveCardsCloud(updated);
   }
 
@@ -365,7 +349,6 @@ function AppShell() {
       return { ...c, balanceCents: c.balanceCents + payment.amountCents };
     });
     setCreditCards(updated);
-    saveCreditCards(updated);
     saveCardsCloud(updated);
   }
 
@@ -375,17 +358,14 @@ function AppShell() {
       updated.push({ id: getNextBillId(updated), ...item });
     }
     setBills(updated);
-    saveBills(updated);
     saveBillsCloud(updated);
   }
 
   function importData(newBills: Bill[], newSettings: PaySettings | null) {
     setBills(newBills);
-    saveBills(newBills);
     saveBillsCloud(newBills);
     if (newSettings) {
       setSettings(newSettings);
-      saveSettings(newSettings);
       saveSettingsCloud(newSettings);
     }
   }
@@ -394,7 +374,6 @@ function AppShell() {
   function applyOverrides(newOverrides: PeriodOverrides) {
     setUndoHistory((prev) => [...prev.slice(-(MAX_UNDO - 1)), periodOverrides]);
     setPeriodOverrides(newOverrides);
-    savePeriodOverrides(newOverrides);
     saveOverridesCloud(newOverrides);
   }
 
@@ -464,7 +443,6 @@ function AppShell() {
       const previous = prev[prev.length - 1];
       const newHistory = prev.slice(0, -1);
       setPeriodOverrides(previous);
-      savePeriodOverrides(previous);
       saveOverridesCloud(previous);
       return newHistory;
     });
