@@ -53,8 +53,8 @@ describe('isCacheValid', () => {
 });
 
 describe('cache TTL integration', () => {
-  const bill: Bill = { id: 1, name: 'Rent', amountCents: 100000, dueDayOfMonth: 1, frequency: 'monthly', category: 'housing' };
-  const settings: PaySettings = { payDayOfMonth: 15, payFrequency: 'monthly' };
+  const bill: Bill = { id: 1, name: 'Rent', amountCents: 100000, dayOfMonth: 1 };
+  const settings: PaySettings = { paycheckAmountCents: 300000, frequency: 'MONTHLY', nextPayday: '2024-01-15', minSpendPerDayCents: 5000 };
 
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.restoreAllMocks());
@@ -82,12 +82,12 @@ describe('cache TTL integration', () => {
   });
 
   it('loadPeriodOverrides returns saved data when cache is fresh', () => {
-    savePeriodOverrides({ '2024-01-01': { skip: true } });
-    expect(loadPeriodOverrides()).toEqual({ '2024-01-01': { skip: true } });
+    savePeriodOverrides({ '2024-01-01': { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} } });
+    expect(loadPeriodOverrides()).toEqual({ '2024-01-01': { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} } });
   });
 
   it('loadPeriodOverrides returns empty object when cache is expired', () => {
-    savePeriodOverrides({ '2024-01-01': { skip: true } });
+    savePeriodOverrides({ '2024-01-01': { oneTimeBills: [], movedInBills: [], movedOutBillIds: [], billPaymentStatuses: {} } });
     localStorage.setItem(KEY_CACHE_TS, String(Date.now() - CACHE_TTL_MS - 1000));
     expect(loadPeriodOverrides()).toEqual({});
   });
