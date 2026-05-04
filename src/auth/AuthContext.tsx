@@ -28,6 +28,10 @@ const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 // device/session. (drive.file does not support files.list queries.)
 const DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly';
 
+function sheetsTokenKey(uid: string): string {
+  return `budgetapp_sheets_token_${uid}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if (u) {
+        // Restore the Sheets OAuth token from sessionStorage so that a hard
+        // refresh (Ctrl+Shift+R) doesn't wipe the token and require a new sign-in.
+        const stored = sessionStorage.getItem(sheetsTokenKey(u.uid));
+        if (stored) setSheetsToken(stored);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -49,10 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (credential?.accessToken) {
       setSheetsToken(credential.accessToken);
+      sessionStorage.setItem(sheetsTokenKey(result.user.uid), credential.accessToken);
     }
   }
 
   async function signOut() {
+    if (user) sessionStorage.removeItem(sheetsTokenKey(user.uid));
     setSheetsToken(null);
     await firebaseSignOut(auth);
   }
@@ -67,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('Could not obtain Google Sheets access token.');
     }
     setSheetsToken(credential.accessToken);
+    sessionStorage.setItem(sheetsTokenKey(result.user.uid), credential.accessToken);
     return credential.accessToken;
   }
 
