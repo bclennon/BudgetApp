@@ -14,6 +14,7 @@ export interface IconSet {
   creditCards: string;
   settings: string;
   backup: string;
+  archived: string;
   signOut: string;
   logo: string;
 }
@@ -36,6 +37,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '💳',
       settings: '⚙️',
       backup: '💾',
+      archived: '📦',
       signOut: '👤',
       logo: '💰',
     },
@@ -50,6 +52,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '🌸',
       settings: '🌻',
       backup: '🌲',
+      archived: '🍂',
       signOut: '🐾',
       logo: '🍀',
     },
@@ -64,6 +67,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '🛸',
       settings: '🔭',
       backup: '💫',
+      archived: '🪐',
       signOut: '👨‍🚀',
       logo: '🌍',
     },
@@ -78,6 +82,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '🎾',
       settings: '⚾',
       backup: '🏈',
+      archived: '🥇',
       signOut: '🏃',
       logo: '🏆',
     },
@@ -92,6 +97,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '🍰',
       settings: '🍳',
       backup: '🥡',
+      archived: '🥫',
       signOut: '👨‍🍳',
       logo: '🍔',
     },
@@ -106,6 +112,7 @@ export const ICON_THEMES: IconTheme[] = [
       creditCards: '🎹',
       settings: '🎼',
       backup: '🎤',
+      archived: '📀',
       signOut: '🎧',
       logo: '🎶',
     },

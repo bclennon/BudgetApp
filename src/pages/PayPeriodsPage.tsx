@@ -300,7 +300,7 @@ function safeBillUrl(url: string | undefined): string | null {
 
 // ── Period card ────────────────────────────────────────────────────────────
 
-interface PeriodCardProps {
+export interface PeriodCardProps {
   period: PayPeriod;
   allPeriods: PayPeriod[];
   allBills: Bill[];
@@ -314,9 +314,11 @@ interface PeriodCardProps {
   onUnmoveBill: (billId: number, fromPeriodStart: string) => void;
   onCreditCardPaymentProcessed: (payments: CreditCardPayment[]) => void;
   onCreditCardPaymentRestored: (payments: CreditCardPayment[]) => void;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
 }
 
-function PeriodCard({
+export function PeriodCard({
   period,
   allPeriods,
   allBills,
@@ -330,6 +332,8 @@ function PeriodCard({
   onUnmoveBill,
   onCreditCardPaymentProcessed,
   onCreditCardPaymentRestored,
+  onArchive,
+  onUnarchive,
 }: PeriodCardProps) {
   const [editingPaycheck, setEditingPaycheck] = useState(false);
   const [movingBillId, setMovingBillId] = useState<number | null>(null);
@@ -538,6 +542,26 @@ function PeriodCard({
           {formatDate(period.startDate)} – {formatDate(period.endDate)}
         </span>
         <span className="period-days">{period.daysInPeriod} days</span>
+        {onArchive && period.endDate < today && (
+          <button
+            className="btn-xs btn-archive"
+            onClick={onArchive}
+            title="Archive this pay period"
+            aria-label="Archive pay period"
+          >
+            📦 Archive
+          </button>
+        )}
+        {onUnarchive && (
+          <button
+            className="btn-xs btn-unarchive"
+            onClick={onUnarchive}
+            title="Unarchive this pay period"
+            aria-label="Unarchive pay period"
+          >
+            ↩ Unarchive
+          </button>
+        )}
       </div>
 
       <table className="period-table">
@@ -889,6 +913,7 @@ interface Props {
   canUndo: boolean;
   onCreditCardPaymentProcessed: (periodStart: string, payments: CreditCardPayment[]) => void;
   onCreditCardPaymentRestored: (periodStart: string, payments: CreditCardPayment[]) => void;
+  onArchivePeriod: (periodStart: string) => void;
 }
 
 export default function PayPeriodsPage({
@@ -903,6 +928,7 @@ export default function PayPeriodsPage({
   canUndo,
   onCreditCardPaymentProcessed,
   onCreditCardPaymentRestored,
+  onArchivePeriod,
 }: Props) {
   if (!settings) {
     return (
@@ -914,6 +940,8 @@ export default function PayPeriodsPage({
   }
 
   const periods = generatePayPeriods(settings, bills, 24, overrides);
+  // Filter out archived periods — they are shown in the Archived tab instead.
+  const activePeriods = periods.filter((p) => !overrides[p.startDate]?.archived);
 
   const todayDate = new Date();
   const today = todayDate.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
@@ -927,7 +955,7 @@ export default function PayPeriodsPage({
   const periodsWithCards = useMemo(() => {
     const result: { period: PayPeriod; adjustedCards: CreditCard[] }[] = [];
     let runningCards = creditCards;
-    for (const period of periods) {
+    for (const period of activePeriods) {
       const adjustedCards = runningCards;
       const override = overrides[period.startDate];
       const ccStatuses = override?.creditCardPaymentStatuses;
@@ -957,7 +985,7 @@ export default function PayPeriodsPage({
       result.push({ period, adjustedCards });
     }
     return result;
-  }, [periods, creditCards, overrides, today, settings.minSpendPerDayCents]);
+  }, [activePeriods, creditCards, overrides, today, settings.minSpendPerDayCents]);
 
   return (
     <div className="page">
@@ -977,7 +1005,7 @@ export default function PayPeriodsPage({
           <PeriodCard
             key={period.startDate}
             period={period}
-            allPeriods={periods}
+            allPeriods={activePeriods}
             allBills={bills}
             override={overrides[period.startDate] ?? emptyOverride()}
             defaultPaycheckCents={settings.paycheckAmountCents}
@@ -997,6 +1025,7 @@ export default function PayPeriodsPage({
             onCreditCardPaymentRestored={(payments) =>
               onCreditCardPaymentRestored(period.startDate, payments)
             }
+            onArchive={() => onArchivePeriod(period.startDate)}
           />
         ))}
       </div>

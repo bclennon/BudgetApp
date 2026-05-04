@@ -66,6 +66,8 @@ export interface PayPeriodOverride {
   creditCardPaymentAmountCents?: number;
   /** @deprecated Use creditCardPayments instead. Kept for backward compatibility. */
   creditCardPaymentCardId?: string;
+  /** When true, this period is archived and hidden from the main Pay Periods view. */
+  archived?: boolean;
 }
 
 /** Map of period startDate → override. */
