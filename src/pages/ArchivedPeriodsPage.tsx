@@ -41,19 +41,16 @@ export default function ArchivedPeriodsPage({
   const todayDate = new Date();
   const today = todayDate.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
-  // Find all archived period startDates from overrides.
-  const archivedStartDates = Object.keys(overrides).filter((d) => overrides[d].archived === true);
-
   // Generate periods starting from the earliest archived date so that all
   // archived periods appear in the list regardless of the current nextPayday.
   // A count of 200 covers many years of periods at any frequency.
   const archivedPeriods: PayPeriod[] = useMemo(() => {
-    if (archivedStartDates.length === 0) return [];
-    const earliest = [...archivedStartDates].sort()[0];
+    const startDates = Object.keys(overrides).filter((d) => overrides[d].archived === true);
+    if (startDates.length === 0) return [];
+    const earliest = [...startDates].sort()[0];
     const startSettings = { ...settings, nextPayday: earliest };
     const allPeriods = generatePayPeriods(startSettings, bills, 200, overrides);
     return allPeriods.filter((p) => overrides[p.startDate]?.archived === true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, bills, overrides]);
 
   if (archivedPeriods.length === 0) {
