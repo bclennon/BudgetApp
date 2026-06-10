@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Budget App</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_in_desc">Sign in to access your bills and pay period data from any device.</string>
+
+    <!--
+        default_web_client_id is normally generated automatically from google-services.json
+        by the google-services Gradle plugin. Once you add your google-services.json file,
+        this placeholder will be replaced with the correct value automatically.
+        DO NOT hard-code your real client ID here — let the plugin generate it.
+    -->
+    <string name="default_web_client_id">REPLACE_WITH_WEB_CLIENT_ID_FROM_FIREBASE_CONSOLE</string>
+</resources>
