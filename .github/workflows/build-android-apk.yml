@@ -37,7 +37,8 @@ jobs:
 
       - name: Print debug SHA-1 fingerprint
         working-directory: android
-        run: ./gradlew signingReport --no-daemon 2>&1 | grep -A2 "Variant: debug" | grep "SHA1"
+        run: |
+          ./gradlew signingReport --no-daemon 2>&1 | grep -A2 "Variant: debug" | grep "SHA1"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
