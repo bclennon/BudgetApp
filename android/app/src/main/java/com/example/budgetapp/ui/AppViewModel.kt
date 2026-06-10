@@ -73,17 +73,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 authManager.handleSignInResult(data)
                 // Auth state listener will trigger loadData()
             } catch (e: ApiException) {
-                if (e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
-                    // User pressed back — reset loading state without showing an error.
-                    _uiState.update { it.copy(isLoading = false) }
-                } else {
-                    _uiState.update {
-                        it.copy(isLoading = false, loadError = "Sign-in failed: ${e.message}")
-                    }
+                val message = when (e.statusCode) {
+                    GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> null // user pressed back
+                    GoogleSignInStatusCodes.SIGN_IN_FAILED ->
+                        "Sign-in failed. Please try again."
+                    GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS ->
+                        "A sign-in is already in progress. Please wait."
+                    GoogleSignInStatusCodes.INVALID_ACCOUNT ->
+                        "Invalid account. Please choose a different Google account."
+                    GoogleSignInStatusCodes.NETWORK_ERROR ->
+                        "Network error. Please check your connection and try again."
+                    GoogleSignInStatusCodes.DEVELOPER_ERROR ->
+                        "Sign-in configuration error. Please ensure the app is properly set up (check SHA-1 and OAuth client ID)."
+                    else -> "Sign-in failed (code ${e.statusCode}). Please try again."
                 }
+                _uiState.update { it.copy(isLoading = false, loadError = message) }
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, loadError = "Sign-in failed: ${e.message}")
+                    it.copy(isLoading = false, loadError = "Sign-in failed. Please try again.")
                 }
             }
         }
