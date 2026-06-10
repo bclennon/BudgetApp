@@ -8,6 +8,8 @@ import com.example.budgetapp.auth.AuthManager
 import com.example.budgetapp.data.SheetTabsNotFoundError
 import com.example.budgetapp.data.SheetsRepository
 import com.example.budgetapp.domain.*
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,11 +68,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Called after the sign-in activity returns a result. */
     fun handleSignInResult(data: Intent?) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadError = null) }
             try {
                 authManager.handleSignInResult(data)
                 // Auth state listener will trigger loadData()
+            } catch (e: ApiException) {
+                val message = when (e.statusCode) {
+                    GoogleSignInStatusCodes.SIGN_IN_CANCELLED -> null // user pressed back
+                    GoogleSignInStatusCodes.SIGN_IN_FAILED ->
+                        "Sign-in failed. Please try again."
+                    GoogleSignInStatusCodes.SIGN_IN_CURRENTLY_IN_PROGRESS ->
+                        "A sign-in is already in progress. Please wait."
+                    GoogleSignInStatusCodes.INVALID_ACCOUNT ->
+                        "Invalid account. Please choose a different Google account."
+                    GoogleSignInStatusCodes.NETWORK_ERROR ->
+                        "Network error. Please check your connection and try again."
+                    GoogleSignInStatusCodes.DEVELOPER_ERROR ->
+                        "Sign-in configuration error. Please ensure the app is properly set up (check SHA-1 and OAuth client ID)."
+                    else -> "Sign-in failed (code ${e.statusCode}). Please try again."
+                }
+                _uiState.update { it.copy(isLoading = false, loadError = message) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(loadError = "Sign-in failed: ${e.message}") }
+                _uiState.update {
+                    it.copy(isLoading = false, loadError = "Sign-in failed. Please try again.")
+                }
             }
         }
     }

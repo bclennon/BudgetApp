@@ -1,6 +1,5 @@
 package com.example.budgetapp
 
-import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -21,9 +20,11 @@ class MainActivity : ComponentActivity() {
     private val signInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.handleSignInResult(result.data)
-        }
+        // Always forward to the ViewModel regardless of resultCode.
+        // handleSignInResult extracts either the signed-in account or a meaningful
+        // error (e.g. DEVELOPER_ERROR, API_NOT_CONNECTED) via
+        // GoogleSignIn.getSignedInAccountFromIntent, which works for all result codes.
+        viewModel.handleSignInResult(result.data)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
