@@ -8,6 +8,8 @@ import com.example.budgetapp.auth.AuthManager
 import com.example.budgetapp.data.SheetTabsNotFoundError
 import com.example.budgetapp.data.SheetsRepository
 import com.example.budgetapp.domain.*
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,11 +68,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Called after the sign-in activity returns a result. */
     fun handleSignInResult(data: Intent?) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, loadError = null) }
             try {
                 authManager.handleSignInResult(data)
                 // Auth state listener will trigger loadData()
+            } catch (e: ApiException) {
+                if (e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
+                    // User pressed back — reset loading state without showing an error.
+                    _uiState.update { it.copy(isLoading = false) }
+                } else {
+                    _uiState.update {
+                        it.copy(isLoading = false, loadError = "Sign-in failed: ${e.message}")
+                    }
+                }
             } catch (e: Exception) {
-                _uiState.update { it.copy(loadError = "Sign-in failed: ${e.message}") }
+                _uiState.update {
+                    it.copy(isLoading = false, loadError = "Sign-in failed: ${e.message}")
+                }
             }
         }
     }
